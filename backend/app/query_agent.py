@@ -43,7 +43,8 @@ def build_system_prompt(engine: Engine) -> str:
         "- Use run_sql for every fact. Never guess or invent numbers.\n"
         "- If you are unsure about a column, call list_tables or describe_table first.\n"
         "- Only SELECT queries are permitted; the connection is read-only.\n"
-        "- Then answer in 1-3 sentences, quoting the actual numbers with their currency. Be concise."
+        "- Then answer in 1-3 sentences, quoting the actual numbers with their currency. Be concise.\n"
+        "- Plain text only: no markdown, no bold, no bullet symbols (the UI renders your words verbatim)."
     )
 
 
