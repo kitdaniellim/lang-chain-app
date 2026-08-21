@@ -67,8 +67,9 @@ The API is billed per token from the Anthropic Console — **a Claude Pro/Max su
 1. Create a project at <https://supabase.com/dashboard> (or let the Supabase MCP do it).
 2. Apply `backend/migrations/001_invoices.sql` in the SQL editor (it creates `invoices` with `jsonb` columns and the
    indexes; `create_all` would also work but the migration is the source of truth for Postgres).
-3. **Project Settings → Database → Connection string → Session pooler**, copy the URI, and change its scheme to
-   `postgresql+psycopg://`. URL-encode the password if it contains special characters:
+3. **Connect → Connection string → Session pooler** (port 5432, IPv4-friendly), copy the URI **exactly as shown** —
+   the host encodes the region the project actually lives in (e.g. `aws-0-ap-northeast-1`) and must not be edited —
+   then change its scheme to `postgresql+psycopg://`. URL-encode the password if it contains special characters:
    ```ini
    DATABASE_URL=postgresql+psycopg://postgres.<project-ref>:<db-password>@aws-0-<region>.pooler.supabase.com:5432/postgres
    ```
@@ -167,4 +168,7 @@ cd frontend && npm run typecheck && npm test && npm run build
 - **CORS error in the browser** — any `localhost`/`127.0.0.1` port is allowed by default; if you serve the frontend
   elsewhere add it to `CORS_ORIGINS`.
 - **Supabase connection refused** — use the *session pooler* URI on port 5432 with the `postgresql+psycopg://` scheme.
+- **`FATAL: (ENOTFOUND) tenant/user postgres.<ref> not found`** — the pooler host's region doesn't match the project's
+  region; copy the host from the dashboard's Connect dialog instead of typing it.
+- **`db.<ref>.supabase.co` does not resolve** — the direct host is IPv6-only; that's why the pooler URI is used.
 - **I want fresh seed data** — delete `backend/invoices.db` (SQLite) or run `python -m app.seed --force`.
