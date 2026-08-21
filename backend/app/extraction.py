@@ -55,7 +55,7 @@ def build_chat_model(settings: Settings) -> BaseChatModel:
     return ChatAnthropic(
         model=settings.anthropic_model,
         api_key=settings.anthropic_api_key,
-        temperature=0,
+        # No temperature: Sonnet 5 rejects sampling parameters (400).
         max_tokens=4096,
         max_retries=2,
     )
