@@ -1,0 +1,965 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>lang-chain-app — invoice pipeline</title>
+<!-- Inline so the page stays a single file with no second request. -->
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' rx='3' fill='%237aa2f7'/%3E%3Cpath d='M4 5h8M4 8h8M4 11h5' stroke='%230d1017' stroke-width='1.6' stroke-linecap='round'/%3E%3C/svg%3E" />
+<style>
+/* ---------------------------------------------------------------------------
+   Palette and scale. Spacing is a 4px scale; every colour is a token so the
+   whole theme can be re-pointed from this one block.
+   --------------------------------------------------------------------------- */
+:root {
+  --bg: #0d1017;
+  --surface: #151a23;
+  --surface-2: #1c222d;
+  --border: #262d3a;
+  --text: #e6e9ef;
+  --muted: #9aa4b6;
+  --accent: #7aa2f7;
+  --ok: #6cc47c;
+  --warn: #e0af68;
+  --bad: #f07178;
+
+  --s1: 4px; --s2: 8px; --s3: 12px; --s4: 16px; --s5: 24px; --s6: 32px; --s7: 48px;
+  --radius: 8px;
+  --font: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; }
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font);
+  font-size: 15px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+a { color: var(--accent); }
+a:hover { text-decoration: none; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
+
+h1, h2, h3 { margin: 0; font-weight: 620; line-height: 1.25; }
+h1 { font-size: 22px; }
+h2 { font-size: 17px; }
+h3 { font-size: 14px; letter-spacing: 0.03em; text-transform: uppercase; color: var(--muted); }
+p { margin: 0; }
+
+/* --- layout --------------------------------------------------------------- */
+.topbar {
+  position: sticky; top: 0; z-index: 10;
+  display: flex; flex-wrap: wrap; align-items: center; gap: var(--s5);
+  padding: var(--s3) var(--s5);
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+}
+.brand { font-weight: 660; letter-spacing: -0.01em; }
+.brand span { color: var(--muted); font-weight: 400; margin-left: var(--s2); }
+.nav { display: flex; flex-wrap: wrap; gap: var(--s1); }
+.nav a {
+  display: inline-flex; align-items: center; min-height: 36px;
+  padding: 0 var(--s3); border-radius: var(--radius);
+  color: var(--muted); text-decoration: none; font-size: 14px;
+}
+.nav a:hover { background: var(--surface-2); color: var(--text); }
+.nav a[aria-current="page"] { background: var(--surface-2); color: var(--text); box-shadow: inset 0 -2px 0 var(--accent); }
+
+main { max-width: 1180px; margin: 0 auto; padding: var(--s5) var(--s5) var(--s7); }
+.page-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--s3); margin-bottom: var(--s4); }
+.page-head p { color: var(--muted); font-size: 14px; }
+.stack { display: flex; flex-direction: column; gap: var(--s4); }
+.row { display: flex; flex-wrap: wrap; gap: var(--s3); align-items: center; }
+.split { display: grid; grid-template-columns: 1fr 1fr; gap: var(--s4); }
+@media (max-width: 860px) { .split { grid-template-columns: 1fr; } }
+
+/* --- surfaces ------------------------------------------------------------- */
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: var(--s4);
+}
+.card > header { display: flex; flex-wrap: wrap; gap: var(--s3); align-items: baseline; margin-bottom: var(--s3); }
+.scroll-x { overflow-x: auto; }
+.muted { color: var(--muted); }
+.small { font-size: 13px; }
+.mono { font-family: var(--mono); font-size: 13px; }
+
+.meta { display: flex; flex-wrap: wrap; gap: var(--s5); margin: 0; }
+.meta div { display: flex; flex-direction: column; gap: 2px; }
+.meta dt { color: var(--muted); font-size: 12px; letter-spacing: 0.03em; text-transform: uppercase; }
+.meta dd { margin: 0; font-variant-numeric: tabular-nums; }
+
+/* --- tables --------------------------------------------------------------- */
+table.table { width: 100%; border-collapse: collapse; font-size: 14px; }
+.table th, .table td { padding: var(--s2) var(--s3); text-align: left; border-bottom: 1px solid var(--border); }
+.table th { color: var(--muted); font-size: 12px; font-weight: 600; letter-spacing: 0.03em; text-transform: uppercase; white-space: nowrap; }
+.table tbody tr:last-child td { border-bottom: none; }
+.table .num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.table tbody tr.clickable { cursor: pointer; }
+.table tbody tr.clickable:hover { background: var(--surface-2); }
+.table tbody tr.open { background: var(--surface-2); }
+.detail-cell { background: var(--bg); }
+
+/* --- pills ---------------------------------------------------------------- */
+.pills { display: flex; flex-wrap: wrap; gap: var(--s1); min-height: 22px; align-items: center; }
+.pill {
+  display: inline-flex; align-items: center; gap: var(--s1);
+  padding: 1px var(--s2); border-radius: 999px;
+  font-size: 12px; line-height: 20px; white-space: nowrap;
+  border: 1px solid var(--border); background: var(--surface-2); color: var(--muted);
+}
+.pill-ok { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 40%, var(--border)); }
+.pill-warn { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 40%, var(--border)); }
+.pill-bad { color: var(--bad); border-color: color-mix(in srgb, var(--bad) 40%, var(--border)); }
+.pill-accent { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 40%, var(--border)); }
+
+/* --- controls ------------------------------------------------------------- */
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: var(--s2);
+  min-height: 40px; padding: 0 var(--s4);
+  border: 1px solid var(--border); border-radius: var(--radius);
+  background: var(--surface-2); color: var(--text);
+  font: inherit; font-size: 14px; cursor: pointer;
+}
+.btn:hover:not(:disabled) { border-color: var(--muted); }
+.btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.btn-primary { background: var(--accent); border-color: var(--accent); color: #0b1020; font-weight: 600; }
+.btn-danger { color: var(--bad); border-color: color-mix(in srgb, var(--bad) 45%, var(--border)); }
+@media (pointer: coarse) { .btn { min-height: 44px; } }
+
+label.field { display: flex; flex-direction: column; gap: var(--s1); font-size: 13px; color: var(--muted); }
+input[type="number"], input[type="text"], input[type="email"], textarea {
+  min-height: 40px; padding: var(--s2) var(--s3);
+  background: var(--bg); color: var(--text);
+  border: 1px solid var(--border); border-radius: var(--radius);
+  font: inherit; font-size: 14px;
+}
+textarea { min-height: 64px; resize: vertical; font-family: var(--font); }
+input[type="range"] { accent-color: var(--accent); min-height: 40px; }
+
+/* --- tabs ----------------------------------------------------------------- */
+.tablist { display: flex; flex-wrap: wrap; gap: var(--s1); border-bottom: 1px solid var(--border); margin-bottom: var(--s4); }
+.tablist button {
+  min-height: 40px; padding: 0 var(--s3);
+  background: none; border: none; border-bottom: 2px solid transparent;
+  color: var(--muted); font: inherit; font-size: 14px; cursor: pointer;
+}
+.tablist button[aria-selected="true"] { color: var(--text); border-bottom-color: var(--accent); }
+.tablist button:hover { color: var(--text); }
+
+/* --- log / prose ---------------------------------------------------------- */
+.log {
+  height: 320px; overflow-y: auto;
+  padding: var(--s3);
+  background: #0a0d13; border: 1px solid var(--border); border-radius: var(--radius);
+  font-family: var(--mono); font-size: 12.5px; line-height: 1.65;
+}
+.log div { white-space: pre-wrap; word-break: break-word; }
+.log .l-warn { color: var(--warn); }
+.log .l-error { color: var(--bad); }
+.log .l-decision { color: var(--accent); }
+.log .l-pause { color: var(--warn); }
+pre.raw {
+  margin: 0; padding: var(--s3); max-height: 460px; overflow: auto;
+  background: #0a0d13; border: 1px solid var(--border); border-radius: var(--radius);
+  font-family: var(--mono); font-size: 12.5px; white-space: pre-wrap; word-break: break-word;
+}
+.summary-box {
+  min-height: 84px; padding: var(--s3);
+  background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--radius);
+  white-space: pre-wrap;
+}
+.notice { padding: var(--s3); border-radius: var(--radius); border: 1px solid var(--border); background: var(--surface-2); font-size: 14px; }
+.notice-bad { color: var(--bad); border-color: color-mix(in srgb, var(--bad) 45%, var(--border)); }
+.empty { padding: var(--s7) var(--s4); text-align: center; color: var(--muted); }
+.empty h2 { color: var(--text); margin-bottom: var(--s2); }
+.review-card { border-color: color-mix(in srgb, var(--warn) 45%, var(--border)); }
+.diagram svg { max-width: 100%; height: auto; }
+details summary { cursor: pointer; color: var(--muted); font-size: 13px; }
+
+@media (prefers-reduced-motion: no-preference) {
+  .nav a, .btn, .tablist button { transition: background-color 120ms ease, color 120ms ease, border-color 120ms ease; }
+}
+</style>
+</head>
+<body>
+<header class="topbar">
+  <div class="brand">lang-chain-app <span>invoice pipeline</span></div>
+  <nav class="nav" aria-label="Sections">
+    <a href="#/batches" data-route="#/batches">Batches</a>
+    <a href="#/run" data-route="#/run">Run</a>
+    <a href="#/ledger" data-route="#/ledger">Ledger</a>
+    <a href="#/graphs" data-route="#/graphs">Graphs</a>
+  </nav>
+</header>
+<main id="view" tabindex="-1"></main>
+
+<script type="module">
+/* ===========================================================================
+   1. api — every call returns parsed JSON or throws an Error carrying `status`
+   =========================================================================== */
+async function request(path, options) {
+  const res = await fetch(path, options);
+  const type = res.headers.get('content-type') || '';
+  if (!res.ok) {
+    let message = res.status + ' ' + (res.statusText || 'request failed');
+    if (type.includes('application/json')) {
+      const body = await res.json().catch(() => null);
+      if (body && body.error) message = body.error;
+    }
+    const error = new Error(message);
+    error.status = res.status;
+    throw error;
+  }
+  return type.includes('application/json') ? res.json() : res.text();
+}
+
+const json = (body) => ({
+  method: 'POST',
+  headers: { 'content-type': 'application/json' },
+  body: JSON.stringify(body),
+});
+
+const api = {
+  batches: () => request('/api/batches'),
+  batch: (id) => request('/api/batches/' + encodeURIComponent(id)),
+  document: (id, docId) =>
+    request('/api/batches/' + encodeURIComponent(id) + '/documents/' + encodeURIComponent(docId)),
+  ledger: () => request('/api/ledger'),
+  graphs: () => request('/api/graphs'),
+  runs: () => request('/api/runs'),
+  startRun: (body) => request('/api/run', json(body)),
+  review: (runId, body) => request('/api/runs/' + encodeURIComponent(runId) + '/review', json(body)),
+};
+
+/* ===========================================================================
+   2. dom + formatting helpers
+   =========================================================================== */
+function h(tag, attrs, ...kids) {
+  const node = document.createElement(tag);
+  for (const [key, value] of Object.entries(attrs || {})) {
+    if (value === null || value === undefined || value === false) continue;
+    if (key === 'class') node.className = value;
+    else if (key === 'text') node.textContent = String(value);
+    else if (key.startsWith('on')) node.addEventListener(key.slice(2), value);
+    else node.setAttribute(key, value === true ? '' : String(value));
+  }
+  for (const kid of kids.flat(Infinity)) {
+    if (kid === null || kid === undefined || kid === false) continue;
+    node.append(kid instanceof Node ? kid : document.createTextNode(String(kid)));
+  }
+  return node;
+}
+
+const money2 = new Intl.NumberFormat(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const amount = (value, currency) =>
+  value === null || value === undefined ? '—' : money2.format(value) + (currency ? ' ' + currency : '');
+const pct = (value) => (value * 100).toFixed(1) + '%';
+
+function when(iso) {
+  if (!iso) return '—';
+  const date = new Date(iso);
+  return Number.isNaN(date.getTime()) ? iso : date.toLocaleString();
+}
+
+function pageHead(title, subtitle, ...extra) {
+  return h('div', { class: 'page-head' }, h('h1', { text: title }), subtitle && h('p', { text: subtitle }), extra);
+}
+
+function metaList(pairs) {
+  return h('dl', { class: 'meta' }, pairs.filter(Boolean).map(([label, value]) =>
+    h('div', {}, h('dt', { text: label }), h('dd', { text: value }))));
+}
+
+/** Column spec: `{ label, num }`. `num` right-aligns and uses tabular figures. */
+function dataTable(columns, rows) {
+  return h('div', { class: 'scroll-x' },
+    h('table', { class: 'table' },
+      h('thead', {}, h('tr', {}, columns.map((col) =>
+        h('th', { scope: 'col', class: col.num ? 'num' : null, text: col.label })))),
+      h('tbody', {}, rows)));
+}
+
+const DECISIONS = {
+  auto_approved: ['pill-ok', '✓', 'auto approved'],
+  approved_by_human: ['pill-ok', '👤', 'approved by human'],
+  rejected_by_human: ['pill-bad', '✗', 'rejected by human'],
+  auto_rejected: ['pill-bad', '✗', 'auto rejected'],
+  needs_review: ['pill-warn', '⏸', 'needs review'],
+};
+const RISKS = { low: 'pill-ok', medium: 'pill-warn', high: 'pill-bad' };
+
+/** Colour never carries meaning alone: every pill spells its state out. */
+function pill(text, variant) {
+  return h('span', { class: 'pill ' + (variant || ''), text });
+}
+const decisionPill = (decision) => {
+  const [variant, icon, label] = DECISIONS[decision] || ['', '•', decision];
+  return pill(icon + ' ' + label, variant);
+};
+const riskPill = (risk) => pill(risk.level + ' ' + risk.score, RISKS[risk.level] || '');
+const issuePill = (issue) => pill(issue.code, issue.severity === 'error' ? 'pill-bad' : 'pill-warn');
+
+/** The four decision counters a batch summary shows, always in the same order. */
+function statsPills(stats) {
+  if (!stats) return h('div', { class: 'pills' }, h('span', { class: 'muted small', text: 'not processed' }));
+  const rejected = stats.autoRejected + stats.rejectedByHuman;
+  return h('div', { class: 'pills' },
+    pill('✓ approved ' + stats.autoApproved, 'pill-ok'),
+    pill('👤 human ' + stats.approvedByHuman, stats.approvedByHuman ? 'pill-ok' : ''),
+    pill('✗ rejected ' + rejected, rejected ? 'pill-bad' : ''),
+    pill('⏸ review ' + stats.needsReview, stats.needsReview ? 'pill-warn' : ''));
+}
+
+/* ===========================================================================
+   3. loading / error / empty states — used by every fetch on every page
+   =========================================================================== */
+const loadingPanel = (what) =>
+  h('div', { class: 'card muted', role: 'status', 'aria-live': 'polite', text: 'Loading ' + (what || 'data') + '…' });
+
+function errorPanel(error, retry) {
+  return h('div', { class: 'card notice notice-bad', role: 'alert' },
+    h('strong', { text: 'Could not load this page. ' }),
+    h('span', { text: error.message }),
+    retry && h('div', { class: 'row', style: 'margin-top: 12px' },
+      h('button', { class: 'btn', onclick: retry, text: 'Try again' })));
+}
+
+/** Renders the loading state, awaits the fetch, then swaps in the built nodes. */
+async function load(root, fetcher, build, what) {
+  root.replaceChildren(loadingPanel(what));
+  try {
+    const data = await fetcher();
+    root.replaceChildren(...[build(data)].flat(Infinity).filter(Boolean));
+  } catch (error) {
+    console.error('[ui] load failed', error);
+    root.replaceChildren(errorPanel(error, () => load(root, fetcher, build, what)));
+  }
+}
+
+/* ===========================================================================
+   4. views — batches
+   =========================================================================== */
+async function batchesView(root) {
+  await load(root, api.batches, (batches) => {
+    if (batches.length === 0) {
+      return h('div', { class: 'card empty' },
+        h('h2', { text: 'No batches yet' }),
+        h('p', { text: 'Generate and process one from the Run page, or run npm run demo in a terminal.' }),
+        h('p', { class: 'row', style: 'justify-content: center; margin-top: 16px' },
+          h('a', { class: 'btn btn-primary', href: '#/run', text: 'Go to the Run page' })));
+    }
+
+    const rows = batches.map((batch) => h('tr', {},
+      h('td', {}, h('a', { href: '#/batches/' + encodeURIComponent(batch.batchId), class: 'mono', text: batch.batchId })),
+      h('td', { class: 'small', text: when(batch.createdAt) }),
+      h('td', { class: 'num', text: String(batch.documents) }),
+      h('td', { class: 'small', text: batch.provider || '—' }),
+      h('td', {}, statsPills(batch.stats)),
+      h('td', { class: 'num', text: batch.stats ? amount(batch.stats.approvedAmount) + ' / ' + amount(batch.stats.totalAmount) : '—' })));
+
+    return [
+      pageHead('Batches', batches.length + ' batch(es) in the output directory, newest first'),
+      h('div', { class: 'card' }, dataTable([
+        { label: 'Batch' }, { label: 'Created' }, { label: 'Docs', num: true },
+        { label: 'Provider' }, { label: 'Decisions' }, { label: 'Approved / total', num: true },
+      ], rows)),
+    ];
+  }, 'batches');
+}
+
+/* ===========================================================================
+   5. views — batch detail (processed / documents / summary / evaluation)
+   =========================================================================== */
+function tabs(items) {
+  const panel = h('div', { role: 'tabpanel', tabindex: '0' });
+  const buttons = items.map((item, index) => h('button', {
+    type: 'button', role: 'tab', id: 'tab-' + item.id, 'aria-controls': 'tabpanel',
+    'aria-selected': String(index === 0),
+    text: item.label,
+    onclick: () => select(index),
+    onkeydown: (event) => {
+      const step = event.key === 'ArrowRight' ? 1 : event.key === 'ArrowLeft' ? -1 : 0;
+      if (step === 0) return;
+      event.preventDefault();
+      select((index + step + items.length) % items.length, true);
+    },
+  }));
+
+  function select(index, focus) {
+    buttons.forEach((button, i) => button.setAttribute('aria-selected', String(i === index)));
+    if (focus) buttons[index].focus();
+    panel.setAttribute('aria-labelledby', 'tab-' + items[index].id);
+    panel.replaceChildren(loadingPanel('panel'));
+    Promise.resolve(items[index].render())
+      .then((node) => panel.replaceChildren(...[node].flat(Infinity).filter(Boolean)))
+      .catch((error) => {
+        console.error('[ui] tab render failed', error);
+        panel.replaceChildren(errorPanel(error, () => select(index)));
+      });
+  }
+
+  select(0);
+  return h('div', {}, h('div', { class: 'tablist', role: 'tablist' }, buttons), panel);
+}
+
+/** The per-invoice drawer: extraction, issues, the investigator brief, timings. */
+function invoiceDetail(invoice) {
+  const timings = Object.entries(invoice.timings || {});
+  return h('div', { class: 'stack' },
+    invoice.issues.length > 0 && h('div', {},
+      h('h3', { text: 'Issues' }),
+      h('ul', { class: 'small' }, invoice.issues.map((issue) =>
+        h('li', {}, issuePill(issue), ' ', issue.message, issue.field ? ' (' + issue.field + ')' : '')))),
+    invoice.investigation && h('div', {},
+      h('h3', { text: 'Investigator' }),
+      h('p', { class: 'small', text: invoice.investigation.brief }),
+      h('div', { class: 'pills', style: 'margin-top: 8px' },
+        pill('recommends ' + invoice.investigation.recommendation, 'pill-accent'),
+        pill('confidence ' + pct(invoice.investigation.confidence)),
+        invoice.investigation.toolsUsed.map((tool) => pill(tool)))),
+    invoice.reviewerNote && h('div', {},
+      h('h3', { text: 'Reviewer note' }),
+      h('p', { class: 'small', text: invoice.reviewerNote })),
+    timings.length > 0 && h('div', {},
+      h('h3', { text: 'Timings' }),
+      h('div', { class: 'pills' }, timings.map(([node, ms]) => pill(node + ' ' + ms + ' ms')))),
+    h('div', {},
+      h('h3', { text: 'Extracted fields' }),
+      h('pre', { class: 'raw', text: JSON.stringify(invoice.extracted, null, 2) })));
+}
+
+function processedTab(result) {
+  if (!result) {
+    return h('div', { class: 'card empty' },
+      h('h2', { text: 'Not processed yet' }),
+      h('p', { text: 'This batch has a manifest but no results. Run it from the Run page or with npm run cli -- run <batchId>.' }));
+  }
+
+  const rows = [];
+  result.processed.forEach((invoice, index) => {
+    const drawer = h('tr', { hidden: true }, h('td', { class: 'detail-cell', colspan: '8' }, invoiceDetail(invoice)));
+    const toggle = () => {
+      const open = drawer.hidden;
+      drawer.hidden = !open;
+      row.classList.toggle('open', open);
+      row.setAttribute('aria-expanded', String(open));
+    };
+    const row = h('tr', {
+      class: 'clickable', tabindex: '0', role: 'button', 'aria-expanded': 'false',
+      onclick: toggle,
+      onkeydown: (event) => {
+        if (event.key !== 'Enter' && event.key !== ' ') return;
+        event.preventDefault();
+        toggle();
+      },
+    },
+      h('td', { class: 'num', text: String(index + 1) }),
+      h('td', { class: 'mono', text: invoice.invoiceNumber || '—' }),
+      h('td', { text: invoice.extracted?.vendorName || '—' }),
+      h('td', { class: 'num', text: amount(invoice.extracted?.total, invoice.extracted?.currency) }),
+      h('td', { class: 'small', text: invoice.categorization?.category || '—' }),
+      h('td', {}, riskPill(invoice.risk)),
+      h('td', {}, decisionPill(invoice.decision)),
+      h('td', {}, h('div', { class: 'pills' }, invoice.issues.length === 0 ? pill('none') : invoice.issues.map(issuePill))));
+    rows.push(row, drawer);
+  });
+
+  return h('div', { class: 'card' },
+    h('header', {}, h('h2', { text: 'Processed invoices' }),
+      h('p', { class: 'muted small', text: 'Select a row to open its extraction, issues and timings.' })),
+    dataTable([
+      { label: '#', num: true }, { label: 'Invoice' }, { label: 'Vendor' }, { label: 'Total', num: true },
+      { label: 'Category' }, { label: 'Risk' }, { label: 'Decision' }, { label: 'Issues' },
+    ], rows));
+}
+
+function documentsTab(manifest) {
+  const viewer = h('div', { class: 'split' });
+  const list = h('ul', { class: 'stack small', style: 'list-style: none; margin: 0; padding: 0' },
+    manifest.documents.map((doc) => h('li', {},
+      h('button', {
+        class: 'btn', style: 'width: 100%; justify-content: space-between',
+        onclick: () => show(doc),
+        text: doc.id + '  ·  ' + doc.format + '  ·  ' + doc.text.length + ' chars',
+      }))));
+
+  async function show(doc) {
+    const truth = manifest.groundTruth.find((invoice) => invoice.id === doc.id) || null;
+    viewer.replaceChildren(loadingPanel('the document'));
+    try {
+      const { text } = await api.document(manifest.batchId, doc.id);
+      viewer.replaceChildren(
+        h('div', { class: 'card' },
+          h('header', {}, h('h2', { text: doc.id }), h('span', { class: 'muted small', text: doc.filename })),
+          h('pre', { class: 'raw', text })),
+        h('div', { class: 'card' },
+          h('header', {}, h('h2', { text: 'Ground truth' }),
+            h('span', { class: 'muted small', text: 'never shown to the pipeline' })),
+          truth
+            ? h('div', { class: 'stack' },
+                metaList([
+                  ['Invoice', truth.invoiceNumber],
+                  ['Vendor', truth.vendor.name],
+                  ['Issued', truth.issueDate],
+                  ['Due', truth.dueDate || '—'],
+                  ['Subtotal', amount(truth.subtotal, truth.currency)],
+                  ['Tax', amount(truth.taxAmount, truth.currency)],
+                  ['Total', amount(truth.total, truth.currency)],
+                  ['PO', truth.poNumber || '—'],
+                ]),
+                h('div', {}, h('h3', { text: 'Injected defects' }),
+                  h('div', { class: 'pills' },
+                    truth.defects.length === 0 ? pill('clean', 'pill-ok') : truth.defects.map((code) => pill(code, 'pill-warn')))))
+            : h('p', { class: 'muted small', text: 'No ground truth recorded for this document.' })));
+    } catch (error) {
+      console.error('[ui] document load failed', error);
+      viewer.replaceChildren(errorPanel(error, () => show(doc)));
+    }
+  }
+
+  if (manifest.documents.length > 0) void show(manifest.documents[0]);
+  return h('div', { class: 'stack' },
+    h('div', { class: 'card' },
+      h('header', {}, h('h2', { text: 'Documents' }),
+        h('span', { class: 'muted small', text: manifest.documents.length + ' raw file(s) under raw/' })), list),
+    viewer);
+}
+
+function summaryTab(result, batchId) {
+  if (!result) return h('div', { class: 'card empty' }, h('h2', { text: 'Nothing delivered yet' }));
+  return h('div', { class: 'stack' },
+    h('div', { class: 'card' }, h('header', {}, h('h2', { text: 'Summary' })),
+      h('p', { text: result.summary || 'No summary was produced.' })),
+    h('div', { class: 'card' },
+      h('header', {}, h('h2', { text: 'Deliveries' })),
+      h('ul', { class: 'stack small', style: 'list-style: none; margin: 0; padding: 0' },
+        result.deliveries.map((delivery) => h('li', { class: 'row' },
+          pill((delivery.ok ? '✓ ' : '✗ ') + delivery.sink, delivery.ok ? 'pill-ok' : 'pill-bad'),
+          h('span', { class: 'muted', text: delivery.detail })))),
+      h('p', { style: 'margin-top: 16px' },
+        h('a', { class: 'btn', href: '/api/batches/' + encodeURIComponent(batchId) + '/report', target: '_blank', rel: 'noopener', text: 'Open the saved HTML report' }))));
+}
+
+function evaluationTab(evaluation) {
+  if (!evaluation) {
+    return h('div', { class: 'card empty' },
+      h('h2', { text: 'No evaluation' }),
+      h('p', { text: 'A batch is scored once it has both ground truth and results.' }));
+  }
+
+  const fieldRows = Object.entries(evaluation.fields).map(([name, score]) => h('tr', {},
+    h('td', { text: name }),
+    h('td', { class: 'num', text: String(score.correct) }),
+    h('td', { class: 'num', text: String(score.total) }),
+    h('td', { class: 'num', text: pct(score.accuracy) })));
+
+  const defectRows = evaluation.defects.length === 0
+    ? [h('tr', {}, h('td', { colspan: '4', class: 'muted', text: '(none injected)' }))]
+    : evaluation.defects.map((defect) => h('tr', {},
+        h('td', { text: defect.code }),
+        h('td', { class: 'num', text: String(defect.injected) }),
+        h('td', { class: 'num', text: String(defect.caught) }),
+        h('td', { class: 'num', text: pct(defect.recall) })));
+
+  const missed = evaluation.perDocument.filter((doc) => doc.defects.length > 0 && doc.caughtIssues.length === 0);
+  const allCaught = evaluation.overallDefectRecall >= 1;
+
+  return h('div', { class: 'stack' },
+    h('div', { class: 'card row' },
+      pill('field accuracy ' + pct(evaluation.overallFieldAccuracy), 'pill-accent'),
+      pill('defect recall ' + pct(evaluation.overallDefectRecall), allCaught ? 'pill-ok' : 'pill-warn'),
+      h('span', { class: 'small', text: allCaught ? 'No injected defect was missed.' : 'Missed in: ' + (missed.map((d) => d.documentId).join(', ') || 'see the per-defect table') })),
+    h('div', { class: 'card' }, h('header', {}, h('h2', { text: 'Extraction fields' })),
+      dataTable([{ label: 'Field' }, { label: 'Correct', num: true }, { label: 'Total', num: true }, { label: 'Accuracy', num: true }], fieldRows)),
+    h('div', { class: 'card' }, h('header', {}, h('h2', { text: 'Injected defects' })),
+      dataTable([{ label: 'Defect' }, { label: 'Injected', num: true }, { label: 'Caught', num: true }, { label: 'Recall', num: true }], defectRows)));
+}
+
+async function batchDetailView(root, batchId) {
+  await load(root, () => api.batch(decodeURIComponent(batchId)), ({ manifest, result, evaluation }) => [
+    pageHead(manifest.batchId, 'Generated ' + when(manifest.createdAt),
+      h('a', { href: '#/batches', class: 'small', text: '← all batches' })),
+    h('div', { class: 'card' }, metaList([
+      ['Seed', String(manifest.seed)],
+      ['Defect rate', manifest.defectRate.toFixed(2)],
+      ['Documents', String(manifest.documents.length)],
+      ['Provider', result ? result.provider : 'not run'],
+      result && ['Started', when(result.startedAt)],
+      result && ['Finished', when(result.finishedAt)],
+      result && ['Thread', result.threadId],
+    ])),
+    tabs([
+      { id: 'processed', label: 'Processed', render: () => processedTab(result) },
+      { id: 'documents', label: 'Documents', render: () => documentsTab(manifest) },
+      { id: 'summary', label: 'Summary & delivery', render: () => summaryTab(result, manifest.batchId) },
+      { id: 'evaluation', label: 'Evaluation', render: () => evaluationTab(evaluation) },
+    ]),
+  ], 'the batch');
+}
+
+/* ===========================================================================
+   6. views — ledger and graphs
+   =========================================================================== */
+async function ledgerView(root) {
+  await load(root, api.ledger, ({ rows }) => {
+    if (rows.length === 0) {
+      return h('div', { class: 'card empty' },
+        h('h2', { text: 'The ledger is empty' }),
+        h('p', { text: 'Every processed invoice is recorded here so the next batch can spot duplicates.' }));
+    }
+
+    const sorted = [...rows].sort((a, b) => String(b.processedAt).localeCompare(String(a.processedAt)));
+    const body = sorted.map((row) => h('tr', {},
+      h('td', { class: 'mono', text: row.invoiceNumber }),
+      h('td', { text: row.vendorName || '—' }),
+      h('td', { class: 'num', text: amount(row.total) }),
+      h('td', { text: row.currency || '—' }),
+      h('td', { class: 'num', text: row.issueDate || '—' }),
+      h('td', {}, h('a', { href: '#/batches/' + encodeURIComponent(row.batchId), class: 'mono small', text: row.batchId })),
+      h('td', {}, decisionPill(row.decision)),
+      h('td', { class: 'small', text: when(row.processedAt) })));
+
+    return [
+      pageHead('Payment ledger', rows.length + ' row(s) — every invoice the pipeline has already decided on'),
+      h('div', { class: 'card' }, dataTable([
+        { label: 'Invoice' }, { label: 'Vendor' }, { label: 'Total', num: true }, { label: 'Currency' },
+        { label: 'Issued', num: true }, { label: 'Batch' }, { label: 'Decision' }, { label: 'Processed' },
+      ], body)),
+    ];
+  }, 'the ledger');
+}
+
+let mermaidLoader = null;
+/** Loads mermaid from the CDN once; a rejection means we render the source instead. */
+function loadMermaid() {
+  if (mermaidLoader) return mermaidLoader;
+  mermaidLoader = new Promise((resolve, reject) => {
+    const script = h('script', { src: 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js' });
+    script.addEventListener('load', () =>
+      window.mermaid ? resolve(window.mermaid) : reject(new Error('mermaid loaded but registered nothing')));
+    script.addEventListener('error', () => reject(new Error('mermaid could not be fetched from the CDN')));
+    document.head.append(script);
+  });
+  return mermaidLoader;
+}
+
+function diagramCard(title, source, key) {
+  const target = h('div', { class: 'diagram', role: 'img', 'aria-label': title + ' diagram' },
+    h('p', { class: 'muted small', text: 'Rendering…' }));
+  const details = h('details', {}, h('summary', { text: 'Mermaid source' }), h('pre', { class: 'raw', text: source }));
+
+  loadMermaid()
+    .then(async (mermaid) => {
+      mermaid.initialize({ startOnLoad: false, theme: 'dark', securityLevel: 'strict' });
+      const { svg } = await mermaid.render('mermaid-' + key + '-' + Date.now(), source);
+      target.innerHTML = svg;
+    })
+    .catch((error) => {
+      console.warn('[ui] mermaid unavailable:', error);
+      target.replaceChildren(h('p', { class: 'notice small', text: 'Diagram rendering is unavailable (' + error.message + ') — the Mermaid source is below.' }));
+      details.open = true;
+    });
+
+  return h('div', { class: 'card stack' }, h('header', {}, h('h2', { text: title })), target, details);
+}
+
+async function graphsView(root) {
+  await load(root, api.graphs, (diagrams) => [
+    pageHead('Compiled graphs', 'Drawn by LangGraph from the compiled graphs, so they cannot drift from the code'),
+    diagramCard('Invoice subgraph — one run per document', diagrams.invoice, 'invoice'),
+    diagramCard('Batch graph — fan out, review, summarise, deliver', diagrams.batch, 'batch'),
+  ], 'the graphs');
+}
+
+/* ===========================================================================
+   7. run — form, SSE stream, live log, streaming summary, browser review
+   =========================================================================== */
+const INTERNAL = (node) => String(node).startsWith('__');
+
+/** Formats a ProgressEvent exactly like the CLI progress printer does. */
+function progressLine(event) {
+  const withDoc = (text) => (event.documentId ? text + ' ' + event.documentId : text);
+  switch (event.type) {
+    case 'node_start': return INTERNAL(event.node) ? null : ['', '▶ ' + withDoc(event.node)];
+    case 'node_end': return INTERNAL(event.node) ? null : ['', '✓ ' + withDoc(event.node) + ' (' + event.ms + ' ms)'];
+    case 'info': return ['', withDoc(event.message)];
+    case 'warn': return ['l-warn', '⚠ ' + withDoc(event.message)];
+    case 'decision': return ['l-decision', '→ ' + event.documentId + ' ' + event.decision + ': ' + event.reason];
+    case 'review_request': return ['l-pause', '⏸ review ' + event.documentId + ' (' + event.remaining + ' left in the queue)'];
+    case 'delivery': return [event.ok ? '' : 'l-error', '✉ ' + event.sink + ' ' + (event.ok ? 'ok' : 'FAILED') + ' — ' + event.detail];
+    case 'log': return [event.level === 'error' ? 'l-error' : event.level === 'warn' ? 'l-warn' : '', event.line];
+    default: return null;
+  }
+}
+
+/** The card a `review` event raises: everything a human needs, plus the two answers. */
+function reviewCard(runId, request, onAnswered) {
+  const note = h('textarea', { id: 'review-note', placeholder: 'Optional note recorded with the decision' });
+  const status = h('p', { class: 'small muted', role: 'status', 'aria-live': 'polite' });
+  const buttons = [];
+
+  async function answer(action) {
+    buttons.forEach((button) => (button.disabled = true));
+    status.textContent = 'Sending ' + action + '…';
+    try {
+      await api.review(runId, { action, note: note.value });
+      onAnswered();
+    } catch (error) {
+      console.error('[ui] review failed', error);
+      status.textContent = 'Could not send the decision: ' + error.message;
+      buttons.forEach((button) => (button.disabled = false));
+    }
+  }
+
+  const approve = h('button', { class: 'btn btn-primary', text: 'Approve', onclick: () => answer('approve') });
+  const reject = h('button', { class: 'btn btn-danger', text: 'Reject', onclick: () => answer('reject') });
+  buttons.push(approve, reject);
+
+  const card = h('section', { class: 'card review-card stack', tabindex: '-1', 'aria-label': 'Review required for ' + request.documentId },
+    h('header', {}, h('h2', { text: 'Review needed — ' + request.documentId }),
+      h('span', { class: 'muted small', text: request.remaining + ' more in the queue' })),
+    request.error && h('p', { class: 'notice notice-bad small', text: request.error }),
+    metaList([
+      ['Invoice', request.invoiceNumber || '—'],
+      ['Vendor', request.vendorName || '—'],
+      ['Total', amount(request.total, request.currency)],
+    ]),
+    h('div', { class: 'row' }, riskPill(request.risk), request.issues.map(issuePill)),
+    request.risk.reasons.length > 0 && h('ul', { class: 'small muted' }, request.risk.reasons.map((reason) => h('li', { text: reason }))),
+    request.issues.length > 0 && h('div', {}, h('h3', { text: 'Issues' }),
+      h('ul', { class: 'small' }, request.issues.map((issue) => h('li', { text: issue.code + ' — ' + issue.message })))),
+    request.investigation && h('div', {}, h('h3', { text: 'Investigator brief' }),
+      h('p', { class: 'small', text: request.investigation.brief }),
+      h('div', { class: 'pills', style: 'margin-top: 8px' },
+        pill('recommends ' + request.investigation.recommendation, 'pill-accent'),
+        request.investigation.toolsUsed.map((tool) => pill(tool)))),
+    request.policyExcerpts.length > 0 && h('div', {}, h('h3', { text: 'Policy' }),
+      request.policyExcerpts.map((excerpt) => h('p', { class: 'small muted', text: excerpt }))),
+    h('label', { class: 'field', for: 'review-note' }, 'Note', note),
+    h('div', { class: 'row' }, approve, reject, status));
+
+  return card;
+}
+
+/** Subscribes to one run's SSE stream and renders it. Returns a teardown function. */
+function attachRun(runId, root) {
+  const statusChip = h('span', { class: 'pill pill-accent', text: 'connecting…' });
+  const log = h('div', { class: 'log', role: 'log', 'aria-live': 'polite', 'aria-label': 'Live run log' });
+  const summary = h('div', { class: 'summary-box muted', 'aria-live': 'polite', text: 'The summary streams here, token by token, once the invoices are decided.' });
+  const reviewSlot = h('div', {});
+  const resultSlot = h('div', {});
+  let summaryStarted = false;
+  let lastSeq = -1;
+
+  root.append(
+    h('div', { class: 'card' },
+      h('header', {}, h('h2', { text: 'Live run' }), statusChip,
+        h('a', { class: 'small', href: '#/batches', text: 'all batches' })),
+      log),
+    reviewSlot,
+    h('div', { class: 'card' }, h('header', {}, h('h2', { text: 'Streaming summary' })), summary),
+    resultSlot);
+
+  const append = (className, text) => {
+    const atBottom = log.scrollHeight - log.scrollTop - log.clientHeight < 40;
+    log.append(h('div', { class: className || null, text }));
+    if (atBottom) log.scrollTop = log.scrollHeight;
+  };
+
+  const source = new EventSource('/api/runs/' + encodeURIComponent(runId) + '/events');
+  /** The server replays from Last-Event-ID, but a browser that lost it would double up. */
+  const fresh = (event) => {
+    const seq = Number.parseInt(event.lastEventId, 10);
+    if (Number.isFinite(seq) && seq <= lastSeq) return false;
+    if (Number.isFinite(seq)) lastSeq = seq;
+    return true;
+  };
+
+  source.addEventListener('open', () => {
+    statusChip.textContent = 'streaming';
+    statusChip.className = 'pill pill-ok';
+  });
+
+  source.addEventListener('progress', (event) => {
+    if (!fresh(event)) return;
+    const line = progressLine(JSON.parse(event.data));
+    if (line) append(line[0], line[1]);
+  });
+
+  source.addEventListener('token', (event) => {
+    if (!fresh(event)) return;
+    if (!summaryStarted) {
+      summaryStarted = true;
+      summary.className = 'summary-box';
+      summary.textContent = '';
+    }
+    summary.textContent += JSON.parse(event.data).text;
+  });
+
+  source.addEventListener('review', (event) => {
+    if (!fresh(event)) return;
+    const request = JSON.parse(event.data);
+    const card = reviewCard(runId, request, () => reviewSlot.replaceChildren());
+    reviewSlot.replaceChildren(card);
+    card.focus();
+    card.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  });
+
+  source.addEventListener('done', (event) => {
+    if (!fresh(event)) return;
+    const { result, checkpoints } = JSON.parse(event.data);
+    statusChip.textContent = 'finished';
+    statusChip.className = 'pill pill-ok';
+    reviewSlot.replaceChildren();
+    resultSlot.replaceChildren(
+      h('div', { class: 'card row' },
+        pill('✓ done', 'pill-ok'),
+        statsPills(result.stats),
+        h('span', { class: 'muted small', text: checkpoints + ' checkpoint(s) on thread ' + result.threadId }),
+        h('a', { class: 'btn btn-primary', href: '#/batches/' + encodeURIComponent(result.batchId), text: 'Open batch' })),
+      processedTab(result));
+    source.close();
+  });
+
+  // The server names the failure event "error", which EventSource also uses for transport
+  // problems — the presence of a payload is what tells the two apart.
+  source.addEventListener('error', (event) => {
+    if (!event.data) {
+      if (source.readyState === EventSource.CLOSED) {
+        statusChip.textContent = 'disconnected';
+        statusChip.className = 'pill pill-bad';
+      } else {
+        statusChip.textContent = 'reconnecting…';
+        statusChip.className = 'pill pill-warn';
+      }
+      return;
+    }
+    if (!fresh(event)) return;
+    const { message } = JSON.parse(event.data);
+    statusChip.textContent = 'failed';
+    statusChip.className = 'pill pill-bad';
+    resultSlot.replaceChildren(h('div', { class: 'card notice notice-bad', role: 'alert', text: 'The run failed: ' + message }));
+    source.close();
+  });
+
+  return () => source.close();
+}
+
+function runForm(onStarted) {
+  const count = h('input', { type: 'number', id: 'run-count', min: '1', max: '50', value: '8', required: true });
+  const seed = h('input', { type: 'number', id: 'run-seed', min: '0', placeholder: 'time-derived' });
+  const rate = h('input', { type: 'range', id: 'run-rate', min: '0', max: '1', step: '0.05', value: '0.35' });
+  const rateOut = h('output', { for: 'run-rate', class: 'mono', text: '0.35' });
+  const email = h('input', { type: 'email', id: 'run-email', placeholder: 'optional — sends the report' });
+  const status = h('p', { class: 'small muted', role: 'status', 'aria-live': 'polite' });
+  const submit = h('button', { class: 'btn btn-primary', type: 'submit', text: 'Start run' });
+
+  rate.addEventListener('input', () => (rateOut.value = rate.value));
+
+  const form = h('form', { class: 'card stack', onsubmit: async (event) => {
+    event.preventDefault();
+    submit.disabled = true;
+    status.textContent = 'Generating the batch…';
+    try {
+      const body = { count: Number(count.value), defectRate: Number(rate.value) };
+      if (seed.value !== '') body.seed = Number(seed.value);
+      if (email.value !== '') body.email = email.value;
+      const started = await api.startRun(body);
+      onStarted(started);
+    } catch (error) {
+      console.error('[ui] could not start the run', error);
+      status.textContent = error.message;
+      submit.disabled = false;
+    }
+  } },
+    h('header', {}, h('h2', { text: 'Generate and process a batch' }),
+      h('span', { class: 'muted small', text: 'Reviews are answered here in the browser' })),
+    h('div', { class: 'row' },
+      h('label', { class: 'field', for: 'run-count' }, 'Invoices (1–50)', count),
+      h('label', { class: 'field', for: 'run-seed' }, 'Seed', seed),
+      h('label', { class: 'field', for: 'run-rate' }, 'Defect rate', h('span', { class: 'row' }, rate, rateOut)),
+      h('label', { class: 'field', for: 'run-email' }, 'Email report to', email)),
+    h('div', { class: 'row' }, submit, status));
+
+  return form;
+}
+
+async function runView(root, runId) {
+  root.replaceChildren(pageHead('Run', 'Streams updates, custom progress events and summary tokens over SSE'));
+
+  if (runId) {
+    root.append(h('div', { class: 'card row' },
+      h('span', { class: 'muted small', text: 'Run ' + runId }),
+      h('a', { class: 'btn', href: '#/run', text: 'Start another run' })));
+    return attachRun(decodeURIComponent(runId), root);
+  }
+
+  root.append(runForm((started) => { location.hash = '#/run/' + started.runId; }));
+
+  // A page opened mid-run should follow that run rather than offer a form it cannot submit.
+  try {
+    const { active } = await api.runs();
+    if (active && active.status === 'running') location.hash = '#/run/' + active.runId;
+  } catch (error) {
+    console.warn('[ui] could not check for an active run:', error);
+  }
+  return null;
+}
+
+/* ===========================================================================
+   8. router
+   =========================================================================== */
+const view = document.getElementById('view');
+const routes = [
+  [/^#\/batches\/([^/]+)$/, batchDetailView],
+  [/^#\/batches$/, batchesView],
+  [/^#\/run\/([^/]+)$/, runView],
+  [/^#\/run$/, runView],
+  [/^#\/ledger$/, ledgerView],
+  [/^#\/graphs$/, graphsView],
+];
+let teardown = null;
+
+function markNav(hash) {
+  for (const link of document.querySelectorAll('.nav a')) {
+    const active = hash.startsWith(link.dataset.route);
+    if (active) link.setAttribute('aria-current', 'page');
+    else link.removeAttribute('aria-current');
+  }
+}
+
+async function render() {
+  if (teardown) {
+    try { teardown(); } catch (error) { console.error('[ui] teardown failed', error); }
+    teardown = null;
+  }
+
+  const hash = location.hash || '#/batches';
+  markNav(hash);
+  const hit = routes.map(([pattern, fn]) => [hash.match(pattern), fn]).find(([match]) => match !== null);
+  if (!hit) {
+    view.replaceChildren(errorPanel(new Error('Unknown page: ' + hash), () => { location.hash = '#/batches'; }));
+    return;
+  }
+
+  const [match, fn] = hit;
+  try {
+    teardown = await fn(view, ...match.slice(1));
+  } catch (error) {
+    console.error('[ui] view failed', error);
+    view.replaceChildren(errorPanel(error, render));
+  }
+}
+
+window.addEventListener('hashchange', render);
+void render();
+</script>
+</body>
+</html>

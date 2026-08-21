@@ -16,6 +16,7 @@
     "evaluate": "tsx src/cli.ts evaluate",
     "graph": "tsx src/cli.ts graph",
     "demo": "tsx src/cli.ts demo",
+    "ui": "tsx src/ui/server.ts",
     "example:lcel": "tsx examples/lcel-basics.ts",
     "example:streaming": "tsx examples/streaming.ts",
     "example:resilience": "tsx examples/retry-fallback.ts",

@@ -111,6 +111,11 @@ export class JsonLedger implements LedgerStore {
     return this.entries.length;
   }
 
+  /** A copy of every row, in insertion order — for read-only consumers like the dashboard. */
+  rows(): LedgerEntry[] {
+    return [...this.entries];
+  }
+
   /**
    * Upsert keyed on (batchId, documentId): re-running a batch replaces its own rows
    * instead of appending a second copy of every invoice.
