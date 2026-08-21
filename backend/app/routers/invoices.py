@@ -14,8 +14,19 @@ from sqlalchemy.orm import Session
 from app.config import Settings, get_settings
 from app.db import get_session
 from app.extraction import ExtractionError, ExtractionResult, LLMNotConfigured, extract_invoice
+from app.file_parsing import FileParseError, FileTooLarge, UnsupportedFile
+from app.importing import build_preview
 from app.models import Invoice as InvoiceRow
-from app.schemas import ExtractRequest, ExtractResponse, InvoiceDraft, InvoiceOut
+from app.schemas import (
+    BulkCreateRequest,
+    BulkCreateResponse,
+    ExtractRequest,
+    ExtractResponse,
+    ImportPreview,
+    InvoiceDraft,
+    InvoiceOut,
+    SkippedInvoice,
+)
 from app.seed import to_row
 from app.validation import round_money, validate_invoice
 
@@ -100,6 +111,72 @@ def upload(
             f"Only {len(text)} characters of text were found in {file.filename}.",
         )
     return _run_extraction(text, settings)
+
+
+@router.post("/invoices/import", response_model=ImportPreview)
+def import_preview(
+    file: UploadFile = File(...), settings: Settings = Depends(get_settings)
+) -> ImportPreview:
+    """Map a CSV/JSON/XLSX export onto our schema and preview the invoices. No write happens."""
+    payload = file.file.read()
+    if len(payload) > MAX_UPLOAD_BYTES:
+        raise HTTPException(
+            status.HTTP_413_CONTENT_TOO_LARGE,
+            f"{file.filename} is {len(payload)} bytes; the limit is {MAX_UPLOAD_BYTES} bytes.",
+        )
+    try:
+        return build_preview(file.filename or "upload.csv", payload, settings)
+    except UnsupportedFile as exc:
+        raise HTTPException(status.HTTP_415_UNSUPPORTED_MEDIA_TYPE, str(exc)) from exc
+    except FileTooLarge as exc:
+        raise HTTPException(status.HTTP_413_CONTENT_TOO_LARGE, str(exc)) from exc
+    except FileParseError as exc:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from exc
+
+
+@router.post("/invoices/bulk", response_model=BulkCreateResponse, status_code=status.HTTP_201_CREATED)
+def bulk_create(body: BulkCreateRequest, session: Session = Depends(get_session)) -> BulkCreateResponse:
+    """Insert confirmed import drafts in one transaction; duplicates are skipped, not fatal."""
+    numbers = [draft.invoice_number.strip() for draft in body.invoices]
+    existing = set(
+        session.scalars(
+            select(InvoiceRow.invoice_number).where(InvoiceRow.invoice_number.in_(numbers))
+        ).all()
+    )
+
+    rows: list[InvoiceRow] = []
+    skipped: list[SkippedInvoice] = []
+    seen: set[str] = set()
+    for draft in body.invoices:
+        number = draft.invoice_number.strip()
+        if not number:
+            skipped.append(SkippedInvoice(invoice_number="", reason="The invoice number is empty."))
+            continue
+        if number in existing:
+            skipped.append(
+                SkippedInvoice(invoice_number=number, reason="An invoice with this number already exists.")
+            )
+            continue
+        if number in seen:
+            skipped.append(
+                SkippedInvoice(invoice_number=number, reason="This number appears twice in the batch.")
+            )
+            continue
+        seen.add(number)
+        invoice = round_money(draft)
+        # Imports may come from summary-level files; missing line detail is not a review flag there.
+        rows.append(to_row(invoice, validate_invoice(invoice, require_line_items=False), "imported", raw_text=None))
+
+    session.add_all(rows)
+    try:
+        session.commit()
+    except IntegrityError as exc:
+        session.rollback()
+        raise HTTPException(status.HTTP_409_CONFLICT, f"Bulk insert failed: {exc.orig}") from exc
+
+    for row in rows:
+        session.refresh(row)
+    return BulkCreateResponse(created=[InvoiceOut.model_validate(row) for row in rows], skipped=skipped)
 
 
 @router.post("/invoices", response_model=InvoiceOut, status_code=status.HTTP_201_CREATED)

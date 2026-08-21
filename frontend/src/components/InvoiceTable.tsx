@@ -18,6 +18,7 @@ const SOURCE_LABELS: Record<InvoiceOut["source"], string> = {
   extracted: "extracted",
   "seed-fallback": "seed (fallback)",
   uploaded: "uploaded",
+  imported: "imported",
 };
 
 /** Newest invoice date first; ties broken by id so the order never flickers. */

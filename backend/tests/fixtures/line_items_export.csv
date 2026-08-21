@@ -1,0 +1,6 @@
+Invoice,Vendor,Date,Item,Qty,Unit Price,Line Total
+LI-3001,Aster Cloud Hosting,2026-07-02,Cloud compute usage,10,45.00,450.00
+LI-3001,Aster Cloud Hosting,2026-07-02,Managed backup storage,2,120.00,240.00
+LI-3001,Aster Cloud Hosting,2026-07-02,Support retainer,1,310.00,310.00
+LI-3002,Harbourline Print Works,2026-07-09,Printed marketing collateral,500,1.20,600.00
+LI-3002,Harbourline Print Works,2026-07-09,Delivery - express,1,75.00,75.00

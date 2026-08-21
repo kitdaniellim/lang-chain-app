@@ -84,6 +84,13 @@ The backend connects with the database role directly (no RLS, no anon key) — f
   (`seed`, `seed (fallback)`, `extracted`, `uploaded`).
 - **Add invoice** — paste text or upload `.txt` / `.md` / `.pdf` → *Extract with LangChain* → review and edit the
   extracted fields and line items, read the validation notes → *Save invoice*.
+- **Import file** — upload a CSV / JSON / XLSX export from *any* system, with whatever column names it uses
+  (`Supplier`, `Inv No`, `Pay By`, `Amount Due`… or nested JSON keys like `Beleg.Nummer`, `Betrag.Brutto`). Claude fills
+  a `ColumnMapping` once per file (which column feeds which field, one row per invoice or per line item, date order,
+  currency default, and a translation of the status vocabulary — `bezahlt → paid`); deterministic code then converts
+  every row (European `1.250,00 €` amounts, `DD.MM.YYYY` dates, derived subtotals with a note), validates it and shows
+  a preview with the mapping, notes and a needs-review badge before anything is saved. Works without a key via a
+  heuristic mapper.
 - **Ask about the invoices** (right sidebar) — type a question or click a suggestion. Each answer has a
   **view query** disclosure showing every SQL statement the agent executed.
 
@@ -125,6 +132,8 @@ agent can only ever run a single `SELECT`.
 | `create_agent` (LangChain 1.x agent loop on LangGraph) | `backend/app/query_agent.py` | system prompt built from live schema introspection; `recursion_limit` 12 |
 | `sql_query_used` in the API | `backend/app/query_agent.py` → `POST /chat` | every executed statement, joined; rendered in the UI's "view query" |
 | Extraction in the seed | `backend/app/seed.py` | three raw documents through the real pipeline when a key exists |
+| Schema mapping with `with_structured_output` | `backend/app/column_mapping.py` `llm_mapping` | Claude fills `ColumnMapping` from headers + sample rows + distinct values; columns it invents are dropped with a note |
+| Deterministic application of a mapping | `backend/app/importing.py` | money/date/status parsers, grouping by granularity, derivations recorded as `import_notes` |
 | Testing LLM code without network | `backend/tests/fakes.py` | structured-output fake, scripted tool-calling fake for the agent loop |
 
 ## 7. API
@@ -136,6 +145,8 @@ agent can only ever run a single `SELECT`.
 | `POST /invoices/extract` | `{text}` | `{invoice, needs_review, review_notes, model}` (no write) |
 | `POST /invoices/upload` | multipart `file` (.txt/.md/.pdf ≤ 2 MB) | same as extract |
 | `POST /invoices` | `InvoiceDraft` (+ optional `raw_text`) | `InvoiceOut` (201); 409 on duplicate invoice number |
+| `POST /invoices/import` | multipart `file` (.csv/.json/.xlsx ≤ 2 MB, ≤ 2 000 rows) | `ImportPreview { mapping, mapping_source, invoices[], unmapped_columns, warnings }` (no write) |
+| `POST /invoices/bulk` | `{ invoices: InvoiceDraft[] }` | `{ created[], skipped[] }` (201); duplicates are skipped with a reason |
 | `POST /chat` | `{question}` | `{answer, sql_query_used}` |
 
 Errors are JSON `{error}`: 422 validation, 413/415 upload limits, 503 no API key, 502 upstream model failure.
@@ -144,9 +155,10 @@ Errors are JSON `{error}`: 422 validation, 413/415 upload limits, 503 no API key
 
 ```
 backend/
-  app/            config, db, models, schemas, validation, extraction, sql_tools, query_agent, seed, routers/, main
+  app/            config, db, models, schemas, validation, extraction, sql_tools, query_agent, seed,
+                  file_parsing, column_mapping, importing, routers/, main
   migrations/     001_invoices.sql (Supabase / Postgres DDL)
-  tests/          pytest (73 tests, SQLite, no network)
+  tests/          pytest (169 tests, SQLite, no network)
   requirements.txt  .env.example
 frontend/
   src/api/        types mirrored from schemas.py, client, mock (VITE_USE_MOCK=true for UI work without a backend)
@@ -158,7 +170,7 @@ docs/             SPEC.md, PLAN.md, reports/ (build reports + screenshots)
 ## 9. Tests
 
 ```bash
-cd backend && .venv\Scripts\python -m pytest -q     # 73 passed
+cd backend && .venv\Scripts\python -m pytest -q     # 169 passed
 cd frontend && npm run typecheck && npm test && npm run build
 ```
 

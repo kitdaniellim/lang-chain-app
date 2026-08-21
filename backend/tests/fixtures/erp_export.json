@@ -1,0 +1,31 @@
+[
+  {
+    "document_no": "ERP-7001",
+    "vendor": { "name": "Torrent Data Labs", "email": "billing@torrentdata.example" },
+    "issued_on": "2026-06-18",
+    "due_on": "2026-07-18",
+    "currency": "EUR",
+    "lines": [
+      { "description": "Data pipeline retainer", "quantity": 1, "unit_price": 2400.0, "amount": 2400.0 },
+      { "description": "Ad-hoc analysis", "quantity": 6, "unit_price": 150.0, "amount": 900.0 }
+    ],
+    "net_amount": 3300.0,
+    "tax_amount": 660.0,
+    "grand_total": 3960.0,
+    "state": "open"
+  },
+  {
+    "document_no": "ERP-7002",
+    "vendor": { "name": "Kestrel Security Systems", "email": "ar@kestrelsecurity.example" },
+    "issued_on": "2026-07-05",
+    "due_on": "2026-08-04",
+    "currency": "GBP",
+    "lines": [
+      { "description": "Alarm monitoring - quarterly", "quantity": 3, "unit_price": 210.0, "amount": 630.0 }
+    ],
+    "net_amount": 630.0,
+    "tax_amount": 126.0,
+    "grand_total": 756.0,
+    "state": "settled"
+  }
+]

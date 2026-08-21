@@ -17,8 +17,11 @@ def today() -> date:
     return date.today()
 
 
-def validate_invoice(inv: Invoice) -> list[str]:
-    """Return human-readable problems; an empty list means the invoice looks trustworthy."""
+def validate_invoice(inv: Invoice, *, require_line_items: bool = True) -> list[str]:
+    """Return human-readable problems; an empty list means the invoice looks trustworthy.
+
+    `require_line_items=False` is for summary-level imports, where a file simply has no line detail.
+    """
     notes: list[str] = []
 
     if not inv.invoice_number.strip():
@@ -27,7 +30,8 @@ def validate_invoice(inv: Invoice) -> list[str]:
         notes.append("Vendor name is missing.")
 
     if not inv.line_items:
-        notes.append("No line items were extracted.")
+        if require_line_items:
+            notes.append("No line items were extracted.")
     else:
         line_sum = round(sum(item.amount for item in inv.line_items), 2)
         if abs(line_sum - inv.subtotal) > TOLERANCE:

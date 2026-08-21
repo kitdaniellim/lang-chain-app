@@ -984,3 +984,100 @@ select {
 .chat__actions .field__hint {
   margin-right: auto;
 }
+
+/* ------------------------------------------------------------------ file import */
+
+/* The preview table needs more room than the extraction form. */
+.drawer--wide {
+  width: min(980px, 100%);
+}
+
+.import {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+}
+
+.import-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  padding: var(--sp-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface-2);
+}
+
+.mapping {
+  table-layout: fixed;
+}
+
+.mapping__field {
+  width: 42%;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.mapping__column {
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  word-break: break-word;
+}
+
+.import-notes {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+}
+
+.import-notes .review__notes li::marker {
+  color: var(--muted);
+}
+
+.import-preview .col-check {
+  width: 32px;
+  text-align: center;
+}
+
+.import-preview input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+.import-preview .cell-status {
+  flex-wrap: wrap;
+}
+
+/* Keep an expanded disclosure from collapsing the other columns. */
+.import-preview .review__notes {
+  min-width: 220px;
+}
+
+.cell-ccy {
+  color: var(--muted);
+  font-size: var(--fs-xs);
+}
+
+/* Neutral variant of the review disclosure: informational, not a warning. */
+.review--info .review__summary {
+  border-color: var(--border-strong);
+  background: var(--surface-3);
+  color: var(--muted);
+}
+
+.review--info .review__notes li::marker {
+  color: var(--muted);
+}
+
+.review__info {
+  color: var(--accent);
+}
+
+.model-chip--muted {
+  border-color: var(--border-strong);
+  background: var(--surface-3);
+  color: var(--muted);
+}

@@ -80,11 +80,10 @@ export default function App() {
   }, []);
 
   const llmConfigured = health?.llm_configured ?? false;
-  const addDisabledReason = llmConfigured
+  // File import maps columns heuristically without a key, so only an unreachable API blocks the drawer.
+  const addDisabledReason = health
     ? null
-    : health
-      ? "Adding invoices needs the extraction endpoint: the server reports no ANTHROPIC_API_KEY."
-      : "Adding invoices is unavailable until the API responds to /health.";
+    : "Adding invoices is unavailable until the API responds to /health.";
 
   return (
     <div className="app">

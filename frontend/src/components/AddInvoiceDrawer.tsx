@@ -2,6 +2,7 @@ import { useEffect, useId, useRef, useState } from "react";
 import { ApiError, extractFromFile, extractFromText, saveInvoice } from "../api/client";
 import type { ExtractResponse, Invoice, InvoiceDraft, InvoiceStatus, LineItem } from "../api/types";
 import { formatMoney, parseNumber } from "../lib/format";
+import { ImportPanel } from "./ImportPanel";
 
 interface AddInvoiceDrawerProps {
   open: boolean;
@@ -11,7 +12,7 @@ interface AddInvoiceDrawerProps {
   onSaved: () => void;
 }
 
-type Tab = "paste" | "upload";
+type Tab = "paste" | "upload" | "import";
 
 const MAX_UPLOAD_BYTES = 2 * 1024 * 1024;
 const TEXT_EXTENSIONS = [".txt", ".md"];
@@ -54,6 +55,9 @@ export function AddInvoiceDrawer({ open, onClose, llmConfigured, onSaved }: AddI
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
 
+  // The import panel keeps its own state; bumping the key throws it away with the drawer.
+  const [importKey, setImportKey] = useState(0);
+
   // Drive the native dialog from the `open` prop so Esc and the backdrop come for free.
   useEffect(() => {
     const dialog = dialogRef.current;
@@ -73,6 +77,7 @@ export function AddInvoiceDrawer({ open, onClose, llmConfigured, onSaved }: AddI
     setSaveError(null);
     setExtracting(false);
     setSaving(false);
+    setImportKey((key) => key + 1);
   }
 
   function handleClose() {
@@ -144,7 +149,7 @@ export function AddInvoiceDrawer({ open, onClose, llmConfigured, onSaved }: AddI
 
   return (
     <dialog
-      className="drawer"
+      className={`drawer${tab === "import" ? " drawer--wide" : ""}`}
       ref={dialogRef}
       aria-modal="true"
       aria-labelledby={`${uid}-title`}
@@ -161,7 +166,7 @@ export function AddInvoiceDrawer({ open, onClose, llmConfigured, onSaved }: AddI
       </div>
 
       <div className="drawer__body">
-        {!llmConfigured && (
+        {!llmConfigured && tab !== "import" && (
           <p className="notice notice--warn" role="status">
             Extraction is unavailable: the server reports no <code>ANTHROPIC_API_KEY</code>. Set the
             key in <code>backend/.env</code> and restart the API to enable “Extract with LangChain”.
@@ -191,9 +196,20 @@ export function AddInvoiceDrawer({ open, onClose, llmConfigured, onSaved }: AddI
           >
             Upload file
           </button>
+          <button
+            type="button"
+            role="tab"
+            id={`${uid}-tab-import`}
+            className="tab"
+            aria-selected={tab === "import"}
+            aria-controls={`${uid}-panel-import`}
+            onClick={() => setTab("import")}
+          >
+            Import file
+          </button>
         </div>
 
-        {tab === "paste" ? (
+        {tab === "paste" && (
           <div
             className="field"
             role="tabpanel"
@@ -213,7 +229,9 @@ export function AddInvoiceDrawer({ open, onClose, llmConfigured, onSaved }: AddI
             />
             <p className="field__hint">At least 20 characters. Paste the email body or the invoice text.</p>
           </div>
-        ) : (
+        )}
+
+        {tab === "upload" && (
           <div
             className="field"
             role="tabpanel"
@@ -242,26 +260,38 @@ export function AddInvoiceDrawer({ open, onClose, llmConfigured, onSaved }: AddI
           </div>
         )}
 
-        <div className="chat__actions">
-          <button
-            type="button"
-            className="btn btn--primary"
-            onClick={handleExtract}
-            disabled={!canExtract}
-          >
-            {extracting ? "Extracting…" : "Extract with LangChain"}
-          </button>
-          {extracting && (
-            <span className="pending" aria-live="polite">
-              <span className="pending__dots" aria-hidden="true">
-                <span />
-                <span />
-                <span />
-              </span>
-              Calling the model…
-            </span>
-          )}
+        {/* Kept mounted so switching tabs never throws away a mapped preview. */}
+        <div
+          role="tabpanel"
+          id={`${uid}-panel-import`}
+          aria-labelledby={`${uid}-tab-import`}
+          hidden={tab !== "import"}
+        >
+          <ImportPanel key={importKey} uid={`${uid}-import`} onImported={onSaved} />
         </div>
+
+        {tab !== "import" && (
+          <div className="chat__actions">
+            <button
+              type="button"
+              className="btn btn--primary"
+              onClick={handleExtract}
+              disabled={!canExtract}
+            >
+              {extracting ? "Extracting…" : "Extract with LangChain"}
+            </button>
+            {extracting && (
+              <span className="pending" aria-live="polite">
+                <span className="pending__dots" aria-hidden="true">
+                  <span />
+                  <span />
+                  <span />
+                </span>
+                Calling the model…
+              </span>
+            )}
+          </div>
+        )}
 
         {extractError && (
           <p className="notice notice--error" role="alert">
@@ -533,21 +563,25 @@ export function AddInvoiceDrawer({ open, onClose, llmConfigured, onSaved }: AddI
 
       <div className="drawer__footer">
         <p className="field__hint drawer__footer-spacer">
-          {draft
-            ? "The server re-validates every field on save."
-            : "Extract first, then review the fields before saving."}
+          {tab === "import"
+            ? "Nothing is stored until you press Import; the server re-validates every row."
+            : draft
+              ? "The server re-validates every field on save."
+              : "Extract first, then review the fields before saving."}
         </p>
         <button type="button" className="btn btn--ghost" onClick={handleClose}>
-          Cancel
+          {tab === "import" ? "Close" : "Cancel"}
         </button>
-        <button
-          type="button"
-          className="btn btn--primary"
-          onClick={handleSave}
-          disabled={!draft || saving}
-        >
-          {saving ? "Saving…" : "Save invoice"}
-        </button>
+        {tab !== "import" && (
+          <button
+            type="button"
+            className="btn btn--primary"
+            onClick={handleSave}
+            disabled={!draft || saving}
+          >
+            {saving ? "Saving…" : "Save invoice"}
+          </button>
+        )}
       </div>
     </dialog>
   );

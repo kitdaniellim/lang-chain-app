@@ -62,7 +62,7 @@ class InvoiceOut(Invoice):
     id: int
     needs_review: bool
     review_notes: list[str]
-    source: Literal["seed", "extracted", "seed-fallback", "uploaded"]
+    source: Literal["seed", "extracted", "seed-fallback", "uploaded", "imported"]
     created_at: datetime
 
 
@@ -95,3 +95,84 @@ class HealthResponse(BaseModel):
 
 class ErrorResponse(BaseModel):
     error: str
+
+
+# --------------------------------------------------------------------------- structured-file import
+# A CSV / JSON / XLSX export from another system rarely uses our column names. Claude fills
+# `ColumnMapping` (which source column feeds which Invoice field); deterministic code applies it.
+
+
+class RowGranularity(str, Enum):
+    INVOICE = "invoice"  # one row per invoice
+    LINE_ITEM = "line_item"  # one row per line item, grouped by the invoice-number column
+
+
+class ColumnMapping(BaseModel):
+    """Source-column name for each Invoice field (null when the file has no such column)."""
+
+    granularity: RowGranularity = Field(description="invoice: one row per invoice; line_item: one row per billed line")
+    invoice_number: str | None = Field(default=None, description="Source column holding the invoice number/reference")
+    vendor_name: str | None = Field(default=None, description="Source column holding the vendor/supplier name")
+    vendor_email: str | None = Field(default=None, description="Source column holding the vendor email")
+    invoice_date: str | None = Field(default=None, description="Source column holding the issue date")
+    due_date: str | None = Field(default=None, description="Source column holding the due date")
+    currency: str | None = Field(default=None, description="Source column holding an ISO currency code")
+    currency_default: str | None = Field(
+        default=None, description="ISO 4217 code to assume when there is no currency column (infer from symbols, locale or vendor)"
+    )
+    status: str | None = Field(default=None, description="Source column holding paid/pending/overdue-like values")
+    subtotal: str | None = Field(default=None, description="Source column holding the pre-tax subtotal")
+    tax: str | None = Field(default=None, description="Source column holding the tax/VAT/GST amount")
+    total: str | None = Field(default=None, description="Source column holding the grand total / amount due")
+    po_number: str | None = Field(default=None, description="Source column holding a purchase-order reference")
+    line_item_description: str | None = Field(default=None, description="Column with the line description (line_item files)")
+    line_item_quantity: str | None = Field(default=None, description="Column with the line quantity")
+    line_item_unit_price: str | None = Field(default=None, description="Column with the line unit price")
+    line_item_amount: str | None = Field(default=None, description="Column with the line amount")
+    line_items_json: str | None = Field(default=None, description="Column whose cells contain a JSON/text list of line items")
+    date_format: Literal["ISO", "DMY", "MDY", "YMD", "unknown"] = Field(
+        default="unknown", description="How day/month/year are ordered in the date columns"
+    )
+    status_values: dict[str, InvoiceStatus] = Field(
+        default_factory=dict,
+        description=(
+            "Translation of every distinct value seen in the status column (any language or vocabulary, "
+            "e.g. 'bezahlt', 'Settled', 'past due') to paid / pending / overdue; empty when there is no status column"
+        ),
+    )
+    notes: list[str] = Field(default_factory=list, description="Assumptions made while mapping (one short sentence each)")
+
+
+class ImportedDraft(BaseModel):
+    invoice: Invoice
+    needs_review: bool
+    review_notes: list[str]
+    # Derivations and assumptions made while converting the rows (informational, not validation failures).
+    import_notes: list[str]
+    source_rows: list[int]
+
+
+class ImportPreview(BaseModel):
+    filename: str
+    row_count: int
+    headers: list[str]
+    mapping: ColumnMapping
+    mapping_source: Literal["claude", "heuristic"]
+    model: str | None
+    invoices: list[ImportedDraft]
+    unmapped_columns: list[str]
+    warnings: list[str]
+
+
+class BulkCreateRequest(BaseModel):
+    invoices: list[InvoiceDraft] = Field(min_length=1, max_length=500)
+
+
+class SkippedInvoice(BaseModel):
+    invoice_number: str
+    reason: str
+
+
+class BulkCreateResponse(BaseModel):
+    created: list[InvoiceOut]
+    skipped: list[SkippedInvoice]

@@ -30,6 +30,27 @@ class StructuredOutputFake:
         return RunnableLambda(_run)
 
 
+class StructuredValueFake:
+    """Same trick for any schema: `with_structured_output` returns a prepared value, or raises."""
+
+    def __init__(self, value: Any = None, error: Exception | None = None) -> None:
+        self.value = value
+        self.error = error
+        self.calls: list[Any] = []
+        self.schemas: list[Any] = []
+
+    def with_structured_output(self, schema: Any, **kwargs: Any) -> Runnable:
+        self.schemas.append(schema)
+
+        def _run(prompt_value: Any) -> Any:
+            self.calls.append(prompt_value)
+            if self.error is not None:
+                raise self.error
+            return self.value
+
+        return RunnableLambda(_run)
+
+
 class ToolCallingFake(GenericFakeChatModel):
     """`GenericFakeChatModel` refuses `bind_tools`; the agent needs it, so return self."""
 

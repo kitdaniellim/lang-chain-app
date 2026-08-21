@@ -2,9 +2,11 @@
 
 import { mockApi } from "./mock";
 import type {
+  BulkCreateResponse,
   ChatResponse,
   ExtractResponse,
   HealthResponse,
+  ImportPreview,
   InvoiceDraft,
   InvoiceOut,
 } from "./types";
@@ -87,6 +89,20 @@ export function extractFromFile(file: File): Promise<ExtractResponse> {
 export function saveInvoice(draft: InvoiceDraft): Promise<InvoiceOut> {
   if (USE_MOCK) return mockApi.save(draft);
   return fetchJson<InvoiceOut>("/invoices", jsonPost(draft));
+}
+
+/** Maps a .csv/.json/.xlsx export onto invoices; nothing is stored until bulkCreate. */
+export function importFile(file: File): Promise<ImportPreview> {
+  if (USE_MOCK) return mockApi.importFile(file);
+  const form = new FormData();
+  form.append("file", file);
+  return fetchJson<ImportPreview>("/invoices/import", { method: "POST", body: form });
+}
+
+/** Creates the reviewed drafts in one request; the server reports what it skipped. */
+export function bulkCreate(invoices: InvoiceDraft[]): Promise<BulkCreateResponse> {
+  if (USE_MOCK) return mockApi.bulkCreate(invoices);
+  return fetchJson<BulkCreateResponse>("/invoices/bulk", jsonPost({ invoices }));
 }
 
 export function askQuestion(question: string): Promise<ChatResponse> {
