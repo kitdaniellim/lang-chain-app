@@ -1,21 +1,41 @@
-# python
+# ---- secrets & local config (never commit) ----
+.env
+.env.*
+**/.env
+**/.env.*
+!.env.example
+!**/.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+secrets/
+**/secrets/
+*.secret
+*credentials*.json
+service-account*.json
+
+# ---- python ----
 backend/.venv/
+.venv/
 __pycache__/
 *.pyc
 .pytest_cache/
-backend/invoices.db
+.ruff_cache/
 backend/*.db
+backend/*.db-journal
 
-# node
-frontend/node_modules/
+# ---- node ----
+node_modules/
 frontend/dist/
+frontend/.vite/
 
-# secrets & local config
-.env
-backend/.env
-frontend/.env
-frontend/.env.local
+# ---- editor / os ----
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
 
-# misc
+# ---- misc ----
 .superpowers/
 *.log
