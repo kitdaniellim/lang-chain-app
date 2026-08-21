@@ -1,0 +1,49 @@
+{
+  "name": "lang-chain-app",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Invoice processing pipeline demonstrating LangChain.js + LangGraph.js core features",
+  "type": "module",
+  "engines": {
+    "node": ">=20.12"
+  },
+  "scripts": {
+    "cli": "tsx src/cli.ts",
+    "generate": "tsx src/cli.ts generate",
+    "preview": "tsx src/cli.ts preview",
+    "run:batch": "tsx src/cli.ts run",
+    "resume": "tsx src/cli.ts resume",
+    "evaluate": "tsx src/cli.ts evaluate",
+    "graph": "tsx src/cli.ts graph",
+    "demo": "tsx src/cli.ts demo",
+    "example:lcel": "tsx examples/lcel-basics.ts",
+    "example:streaming": "tsx examples/streaming.ts",
+    "example:resilience": "tsx examples/retry-fallback.ts",
+    "example:time-travel": "tsx examples/time-travel.ts",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.115.0",
+    "@faker-js/faker": "^10.6.0",
+    "@langchain/anthropic": "^1.5.7",
+    "@langchain/core": "^1.2.9",
+    "@langchain/langgraph": "^1.4.12",
+    "@langchain/langgraph-checkpoint-sqlite": "^1.0.4",
+    "@langchain/textsplitters": "^1.0.0",
+    "cli-table3": "^0.6.5",
+    "commander": "^15.0.0",
+    "langchain": "^1.5.10",
+    "nodemailer": "^9.0.5",
+    "picocolors": "^1.1.1",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "@types/nodemailer": "^7.0.0",
+    "tsx": "^4.23.12",
+    "typescript": "^5.9.0",
+    "vitest": "^4.1.11"
+  }
+}
