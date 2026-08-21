@@ -1,7 +1,21 @@
-node_modules/
-out/
+# python
+backend/.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+backend/invoices.db
+backend/*.db
+
+# node
+frontend/node_modules/
+frontend/dist/
+
+# secrets & local config
 .env
-*.sqlite
-*.sqlite-journal
-coverage/
+backend/.env
+frontend/.env
+frontend/.env.local
+
+# misc
 .superpowers/
+*.log

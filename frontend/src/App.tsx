@@ -1,0 +1,139 @@
+import { useCallback, useEffect, useState } from "react";
+import { ApiError, USE_MOCK, getHealth, getInvoices } from "./api/client";
+import type { HealthResponse, InvoiceOut } from "./api/types";
+import { AddInvoiceDrawer } from "./components/AddInvoiceDrawer";
+import { ChatPanel } from "./components/ChatPanel";
+import { HealthChip } from "./components/HealthChip";
+import { InvoiceTable } from "./components/InvoiceTable";
+
+const HEALTH_POLL_MS = 30_000;
+
+function messageOf(cause: unknown): string {
+  if (cause instanceof ApiError) return cause.message;
+  if (cause instanceof Error) return cause.message;
+  return "Unexpected error";
+}
+
+export default function App() {
+  const [health, setHealth] = useState<HealthResponse | null>(null);
+  const [healthLoading, setHealthLoading] = useState(true);
+  const [healthError, setHealthError] = useState<string | null>(null);
+
+  const [invoices, setInvoices] = useState<InvoiceOut[]>([]);
+  const [invoicesLoading, setInvoicesLoading] = useState(true);
+  const [invoicesError, setInvoicesError] = useState<string | null>(null);
+
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [chatOpen, setChatOpen] = useState(true);
+
+  // Loading is already true on mount; callers that re-fetch flip it via `refresh`.
+  const loadInvoices = useCallback(async (signal?: AbortSignal) => {
+    try {
+      const rows = await getInvoices(signal);
+      if (signal?.aborted) return;
+      setInvoices(rows);
+      setInvoicesError(null);
+    } catch (cause) {
+      if (signal?.aborted) return;
+      setInvoicesError(messageOf(cause));
+    } finally {
+      if (!signal?.aborted) setInvoicesLoading(false);
+    }
+  }, []);
+
+  const refresh = useCallback(() => {
+    setInvoicesLoading(true);
+    void loadInvoices();
+  }, [loadInvoices]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    void loadInvoices(controller.signal);
+    return () => controller.abort();
+  }, [loadInvoices]);
+
+  // Poll /health so the key/database chip stays honest while the app is open.
+  useEffect(() => {
+    const controller = new AbortController();
+
+    async function poll() {
+      try {
+        const response = await getHealth(controller.signal);
+        if (controller.signal.aborted) return;
+        setHealth(response);
+        setHealthError(null);
+      } catch (cause) {
+        if (controller.signal.aborted) return;
+        setHealth(null);
+        setHealthError(messageOf(cause));
+      } finally {
+        if (!controller.signal.aborted) setHealthLoading(false);
+      }
+    }
+
+    void poll();
+    const timer = window.setInterval(() => void poll(), HEALTH_POLL_MS);
+    return () => {
+      controller.abort();
+      window.clearInterval(timer);
+    };
+  }, []);
+
+  const llmConfigured = health?.llm_configured ?? false;
+  const addDisabledReason = llmConfigured
+    ? null
+    : health
+      ? "Adding invoices needs the extraction endpoint: the server reports no ANTHROPIC_API_KEY."
+      : "Adding invoices is unavailable until the API responds to /health.";
+
+  return (
+    <div className="app">
+      <header className="app-header">
+        <div className="app-header__brand">
+          <h1 className="app-header__title">lang-chain-app</h1>
+          <p className="app-header__tagline">Invoice extraction and natural-language querying</p>
+        </div>
+        {USE_MOCK && (
+          <p className="health-chip health-chip--warn">
+            <span className="health-chip__dot" />
+            mock data
+          </p>
+        )}
+        <HealthChip health={health} loading={healthLoading} error={healthError} />
+        <button
+          type="button"
+          className="btn chat-toggle"
+          aria-expanded={chatOpen}
+          aria-controls="chat-panel"
+          onClick={() => setChatOpen((open) => !open)}
+        >
+          {chatOpen ? "Hide chat" : "Show chat"}
+        </button>
+      </header>
+
+      <div className="app__body">
+        <main className="app__main">
+          <InvoiceTable
+            invoices={invoices}
+            loading={invoicesLoading}
+            error={invoicesError}
+            onRetry={refresh}
+            onAddInvoice={() => setDrawerOpen(true)}
+            addDisabledReason={addDisabledReason}
+          />
+        </main>
+
+        <div id="chat-panel" className={`chat-column${chatOpen ? "" : " chat--collapsed"}`}>
+          <ChatPanel llmConfigured={llmConfigured} />
+        </div>
+      </div>
+
+      <AddInvoiceDrawer
+        open={drawerOpen}
+        onClose={() => setDrawerOpen(false)}
+        llmConfigured={llmConfigured}
+        onSaved={refresh}
+      />
+    </div>
+  );
+}

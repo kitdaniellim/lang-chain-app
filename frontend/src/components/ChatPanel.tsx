@@ -1,0 +1,185 @@
+import { useEffect, useId, useRef, useState } from "react";
+import type { KeyboardEvent } from "react";
+import { ApiError, askQuestion } from "../api/client";
+
+interface ChatPanelProps {
+  /** false disables the input and explains why (no ANTHROPIC_API_KEY on the server). */
+  llmConfigured: boolean;
+}
+
+type Role = "user" | "assistant" | "error";
+
+interface Message {
+  id: number;
+  role: Role;
+  text: string;
+  sql?: string;
+}
+
+const SUGGESTIONS = [
+  "How much have we spent with each vendor?",
+  "Which invoices are overdue?",
+  "Total outstanding balance?",
+  "Show me all invoices over $1000",
+];
+
+const ROLE_LABELS: Record<Role, string> = {
+  user: "You",
+  assistant: "Assistant",
+  error: "Error",
+};
+
+let messageId = 0;
+
+export function ChatPanel({ llmConfigured }: ChatPanelProps) {
+  const uid = useId();
+  const threadRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
+
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [question, setQuestion] = useState("");
+  const [pending, setPending] = useState(false);
+
+  // Keep the newest message in view without stealing focus from the textarea.
+  useEffect(() => {
+    const thread = threadRef.current;
+    if (thread) thread.scrollTop = thread.scrollHeight;
+  }, [messages, pending]);
+
+  async function ask(text: string) {
+    const trimmed = text.trim();
+    if (!trimmed || pending || !llmConfigured) return;
+
+    setMessages((current) => [...current, { id: messageId++, role: "user", text: trimmed }]);
+    setQuestion("");
+    setPending(true);
+    try {
+      const response = await askQuestion(trimmed);
+      setMessages((current) => [
+        ...current,
+        {
+          id: messageId++,
+          role: "assistant",
+          text: response.answer,
+          sql: response.sql_query_used || undefined,
+        },
+      ]);
+    } catch (cause) {
+      const detail =
+        cause instanceof ApiError
+          ? `${cause.message}${cause.status ? ` (HTTP ${cause.status})` : ""}`
+          : cause instanceof Error
+            ? cause.message
+            : "Unexpected error";
+      setMessages((current) => [...current, { id: messageId++, role: "error", text: detail }]);
+    } finally {
+      setPending(false);
+      inputRef.current?.focus();
+    }
+  }
+
+  function handleKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
+    if (event.key === "Enter" && !event.shiftKey) {
+      event.preventDefault();
+      void ask(question);
+    }
+  }
+
+  const disabled = !llmConfigured || pending;
+
+  return (
+    <aside className="panel chat" aria-labelledby={`${uid}-title`}>
+      <header className="chat__header">
+        <h2 className="chat__title" id={`${uid}-title`}>
+          Ask about the invoices
+        </h2>
+        <p className="chat__subtitle">
+          A LangChain agent writes the SQL, runs it read-only, and shows you the query.
+        </p>
+      </header>
+
+      {!llmConfigured && (
+        <p className="notice notice--warn" role="status">
+          Chat is unavailable: the server reports no <code>ANTHROPIC_API_KEY</code>.
+        </p>
+      )}
+
+      <div className="chips">
+        {SUGGESTIONS.map((suggestion) => (
+          <button
+            key={suggestion}
+            type="button"
+            className="chip"
+            onClick={() => void ask(suggestion)}
+            disabled={disabled}
+          >
+            {suggestion}
+          </button>
+        ))}
+      </div>
+
+      <div className="chat__thread" ref={threadRef} aria-live="polite" aria-label="Conversation">
+        {messages.length === 0 && !pending && (
+          <p className="field__hint">
+            No questions yet — pick a suggestion above or type your own.
+          </p>
+        )}
+
+        {messages.map((message) => (
+          <div key={message.id} className={`bubble bubble--${message.role}`}>
+            <span className="bubble__role">{ROLE_LABELS[message.role]}</span>
+            {message.text}
+            {message.sql && (
+              <details className="bubble__sql">
+                <summary>view query</summary>
+                <pre>
+                  <code>{message.sql}</code>
+                </pre>
+              </details>
+            )}
+          </div>
+        ))}
+
+        {pending && (
+          <p className="pending">
+            <span className="pending__dots" aria-hidden="true">
+              <span />
+              <span />
+              <span />
+            </span>
+            Thinking…
+          </p>
+        )}
+      </div>
+
+      <form
+        className="chat__form"
+        onSubmit={(event) => {
+          event.preventDefault();
+          void ask(question);
+        }}
+      >
+        <label className="field__label" htmlFor={`${uid}-question`}>
+          Your question
+        </label>
+        <textarea
+          className="input chat__input"
+          id={`${uid}-question`}
+          ref={inputRef}
+          value={question}
+          rows={3}
+          placeholder="e.g. Which vendor did we pay the most?"
+          disabled={disabled}
+          onChange={(event) => setQuestion(event.target.value)}
+          onKeyDown={handleKeyDown}
+        />
+        <div className="chat__actions">
+          <span className="field__hint">Enter sends · Shift+Enter adds a line</span>
+          <button type="submit" className="btn btn--primary" disabled={disabled || !question.trim()}>
+            Send
+          </button>
+        </div>
+      </form>
+    </aside>
+  );
+}
