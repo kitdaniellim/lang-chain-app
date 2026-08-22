@@ -82,7 +82,10 @@ select {
   font-size: var(--fs-sm);
   font-weight: 600;
   cursor: pointer;
-  transition: background var(--dur) var(--ease), border-color var(--dur) var(--ease);
+  transition:
+    background var(--dur) var(--ease),
+    border-color var(--dur) var(--ease),
+    transform var(--dur-press) var(--ease-out);
 }
 
 .btn:hover:not(:disabled) {
@@ -90,9 +93,31 @@ select {
   border-color: var(--accent);
 }
 
+/* Every pressable surface answers the press. */
+.btn:active:not(:disabled) {
+  transform: scale(0.97);
+}
+
 .btn:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+/* Tertiary action: reads as a link, still keeps a 44 px target. */
+.btn--text {
+  padding: var(--sp-2);
+  border-color: transparent;
+  background: transparent;
+  color: var(--accent-strong);
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.btn--text:hover:not(:disabled) {
+  background: transparent;
+  border-color: transparent;
+  color: var(--accent);
 }
 
 .btn--primary {
@@ -541,7 +566,7 @@ select {
 .drawer[open] {
   display: flex;
   flex-direction: column;
-  animation: drawer-in var(--dur) var(--ease);
+  animation: drawer-in var(--dur-drawer) var(--ease-drawer);
 }
 
 .drawer::backdrop {
@@ -550,7 +575,7 @@ select {
 
 @keyframes drawer-in {
   from {
-    transform: translateX(24px);
+    transform: translateX(32px);
     opacity: 0;
   }
   to {
@@ -559,9 +584,19 @@ select {
   }
 }
 
+@keyframes drawer-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* Reduced motion keeps the fade, which aids comprehension, and drops the slide. */
 @media (prefers-reduced-motion: reduce) {
   .drawer[open] {
-    animation: none;
+    animation: drawer-fade 160ms var(--ease-out);
   }
 }
 
@@ -621,41 +656,26 @@ select {
   color: var(--text);
 }
 
-/* ------------------------------------------------------------------ tabs + forms */
+/* ------------------------------------------------------------------ form bits */
 
-.tabs {
-  display: flex;
-  gap: var(--sp-2);
-  padding: var(--sp-1);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  background: var(--surface-2);
-}
-
-.tab {
-  flex: 1;
+.input {
+  width: 100%;
   min-height: var(--tap);
-  padding: var(--sp-2) var(--sp-4);
-  border: none;
-  border-radius: var(--radius-sm);
-  background: transparent;
-  color: var(--muted);
-  font-size: var(--fs-sm);
-  font-weight: 600;
-  cursor: pointer;
-}
-
-.tab[aria-selected="true"] {
-  background: var(--surface-3);
+  padding: var(--sp-2) var(--sp-3);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  background: var(--bg);
   color: var(--text);
-  box-shadow: var(--shadow-1);
+  font-size: var(--fs-sm);
+  transition: border-color var(--dur) var(--ease);
 }
 
-.field {
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-1);
-  min-width: 0;
+.input::placeholder {
+  color: var(--muted);
+}
+
+.input:hover {
+  border-color: var(--accent);
 }
 
 .field__label {
@@ -668,77 +688,6 @@ select {
 .field__hint {
   color: var(--muted);
   font-size: var(--fs-xs);
-}
-
-.input,
-.textarea,
-.select {
-  width: 100%;
-  min-height: var(--tap);
-  padding: var(--sp-2) var(--sp-3);
-  border: 1px solid var(--border-strong);
-  border-radius: var(--radius-md);
-  background: var(--bg);
-  color: var(--text);
-  font-size: var(--fs-sm);
-}
-
-.input::placeholder,
-.textarea::placeholder {
-  color: var(--muted);
-}
-
-.input:hover,
-.textarea:hover,
-.select:hover {
-  border-color: var(--accent);
-}
-
-.input--number {
-  text-align: right;
-  font-variant-numeric: tabular-nums;
-}
-
-.textarea {
-  min-height: 190px;
-  resize: vertical;
-  font-family: var(--font-mono);
-  font-size: var(--fs-xs);
-  line-height: var(--lh-normal);
-}
-
-.field-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
-  gap: var(--sp-3);
-}
-
-.file-drop {
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-2);
-  padding: var(--sp-6);
-  border: 1px dashed var(--border-strong);
-  border-radius: var(--radius-md);
-  background: var(--surface-2);
-  text-align: center;
-}
-
-.section-heading {
-  display: flex;
-  align-items: baseline;
-  gap: var(--sp-3);
-  padding-top: var(--sp-2);
-  border-top: 1px solid var(--border);
-  color: var(--text);
-  font-size: var(--fs-md);
-  font-weight: 650;
-}
-
-.section-heading__meta {
-  color: var(--muted);
-  font-size: var(--fs-xs);
-  font-weight: 400;
 }
 
 .lines {
@@ -765,10 +714,6 @@ select {
 
 .lines .col-amount {
   text-align: right;
-}
-
-.lines .input {
-  min-height: 36px;
 }
 
 .model-chip {
@@ -985,29 +930,6 @@ select {
   margin-right: auto;
 }
 
-/* ------------------------------------------------------------------ file import */
-
-/* The preview table needs more room than the extraction form. */
-.drawer--wide {
-  width: min(980px, 100%);
-}
-
-.import {
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-4);
-}
-
-.import-card {
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-3);
-  padding: var(--sp-4);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  background: var(--surface-2);
-}
-
 .mapping {
   table-layout: fixed;
 }
@@ -1025,42 +947,6 @@ select {
   word-break: break-word;
 }
 
-.import-notes {
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-1);
-}
-
-.import-notes .review__notes li::marker {
-  color: var(--muted);
-}
-
-.import-preview .col-check {
-  width: 32px;
-  text-align: center;
-}
-
-.import-preview input[type="checkbox"] {
-  width: 16px;
-  height: 16px;
-  accent-color: var(--accent);
-  cursor: pointer;
-}
-
-.import-preview .cell-status {
-  flex-wrap: wrap;
-}
-
-/* Keep an expanded disclosure from collapsing the other columns. */
-.import-preview .review__notes {
-  min-width: 220px;
-}
-
-.cell-ccy {
-  color: var(--muted);
-  font-size: var(--fs-xs);
-}
-
 /* Neutral variant of the review disclosure: informational, not a warning. */
 .review--info .review__summary {
   border-color: var(--border-strong);
@@ -1072,12 +958,293 @@ select {
   color: var(--muted);
 }
 
-.review__info {
-  color: var(--accent);
-}
-
 .model-chip--muted {
   border-color: var(--border-strong);
   background: var(--surface-3);
   color: var(--muted);
+}
+
+/* ------------------------------------------------------------------ invoice intake */
+
+/* The preview table needs more room than the dropzone; the width changes once, on file choice. */
+.drawer--wide {
+  width: min(1040px, 100%);
+}
+
+.dropzone-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+}
+
+/* One clickable panel that is also the drop target. Dashed edge reads as "put something here". */
+.dropzone {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-2);
+  width: 100%;
+  min-height: 208px;
+  padding: var(--sp-10) var(--sp-6);
+  border: 1.5px dashed var(--border-dashed);
+  border-radius: var(--radius-lg);
+  background: var(--surface-2);
+  color: var(--text);
+  text-align: center;
+  cursor: pointer;
+  transition:
+    border-color var(--dur) var(--ease),
+    background var(--dur) var(--ease),
+    transform var(--dur-press) var(--ease-out);
+}
+
+.dropzone:hover {
+  border-color: var(--accent);
+}
+
+/* Dragging over lifts the surface a pixel instead of lighting it up. */
+.dropzone--over {
+  border-color: var(--accent);
+  border-style: solid;
+  background: var(--surface-3);
+  transform: translateY(-1px);
+}
+
+.dropzone:active {
+  transform: scale(0.995);
+}
+
+.dropzone__glyph {
+  color: var(--muted);
+  transition: color var(--dur) var(--ease);
+}
+
+.dropzone:hover .dropzone__glyph,
+.dropzone--over .dropzone__glyph {
+  color: var(--accent);
+}
+
+.dropzone__title {
+  font-size: var(--fs-md);
+  font-weight: 650;
+}
+
+.dropzone__hint {
+  color: var(--muted);
+  font-size: var(--fs-sm);
+}
+
+.dropzone__note {
+  color: var(--muted);
+  font-size: var(--fs-xs);
+  line-height: var(--lh-normal);
+}
+
+.dropzone__note code {
+  font-family: var(--font-mono);
+  font-size: 0.95em;
+}
+
+/* What the dropzone collapses into once a file is in flight. */
+.filerow {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: var(--sp-2) var(--sp-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface-2);
+  font-size: var(--fs-sm);
+}
+
+.filerow__icon {
+  flex: none;
+  color: var(--muted);
+}
+
+.filerow__name {
+  min-width: 0;
+  overflow: hidden;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.filerow__size {
+  margin-right: auto;
+  color: var(--muted);
+  font-size: var(--fs-xs);
+  white-space: nowrap;
+}
+
+.status-line {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  color: var(--muted);
+  font-size: var(--fs-sm);
+}
+
+/* Skeleton cells sit on the real column grid so nothing reflows when the rows land. */
+.skeleton-cell {
+  display: block;
+  height: 12px;
+  border-radius: var(--radius-sm);
+  background: linear-gradient(90deg, var(--surface-2), var(--surface-3), var(--surface-2));
+  background-size: 200% 100%;
+  animation: shimmer 1.4s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skeleton-cell {
+    animation: none;
+  }
+}
+
+.preview-table .col-check {
+  width: var(--tap);
+  padding: 0;
+  text-align: center;
+}
+
+/* A 16 px box inside a 44 px target. */
+.check {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--tap);
+  height: var(--tap);
+  cursor: pointer;
+}
+
+.check input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+.preview-row {
+  animation: row-in var(--dur-enter) var(--ease-out) backwards;
+}
+
+@keyframes row-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .preview-row {
+    animation: none;
+  }
+}
+
+.ingest-summary {
+  color: var(--text);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+}
+
+.ingest-summary--done {
+  color: var(--ok);
+}
+
+/* Collapsed explanations: the mapping table and the source text. */
+.disclosure {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface-2);
+}
+
+.disclosure__summary {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  min-height: var(--tap);
+  padding: var(--sp-2) var(--sp-4);
+  color: var(--text);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  cursor: pointer;
+  list-style: none;
+}
+
+.disclosure__summary::-webkit-details-marker {
+  display: none;
+}
+
+.disclosure__summary .model-chip {
+  margin-left: auto;
+  font-weight: 600;
+}
+
+.disclosure__chevron {
+  color: var(--muted);
+  transition: transform var(--dur) var(--ease);
+}
+
+.disclosure[open] .disclosure__chevron {
+  transform: rotate(90deg);
+}
+
+.disclosure__body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  padding: 0 var(--sp-4) var(--sp-4);
+}
+
+.raw-text {
+  margin: 0;
+  max-height: 320px;
+  overflow: auto;
+  padding: var(--sp-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  line-height: var(--lh-normal);
+  white-space: pre-wrap;
+}
+
+.import-notes {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+}
+
+.import-notes .review__notes li::marker {
+  color: var(--muted);
+}
+
+/* Inline progress inside the save button. */
+.spinner {
+  width: 14px;
+  height: 14px;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  opacity: 0.85;
+  animation: spin 640ms linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spinner {
+    animation: none;
+  }
 }

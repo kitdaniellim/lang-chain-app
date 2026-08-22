@@ -183,3 +183,49 @@ def test_bulk_rejects_an_empty_list(client: TestClient) -> None:
 
     assert response.status_code == 422
     assert "invoices" in response.json()["error"]
+
+
+# --------------------------------------------------------------------------- POST /invoices/ingest
+
+
+def ingest(client: TestClient, name: str, data: bytes, mime: str = "application/octet-stream") -> Any:
+    return client.post("/invoices/ingest", files={"file": (name, data, mime)})
+
+
+def test_ingest_routes_exports_through_column_mapping(client: TestClient) -> None:
+    response = ingest(client, "vendor_export.csv", read_fixture("vendor_export.csv"), "text/csv")
+    body = response.json()
+
+    assert response.status_code == 200
+    assert body["kind"] == "imported"
+    assert body["mapping_source"] == "heuristic"  # no API key in tests
+    assert body["mapping"]["invoice_number"] == "Inv No"
+    assert body["raw_text"] is None
+    assert len(body["invoices"]) == 4
+
+
+def test_ingest_routes_documents_through_extraction(client: TestClient) -> None:
+    text = b"INVOICE\nInvoice Number: X-1\nVendor: Somebody\nTotal Due: 10.00\n" * 2
+    response = ingest(client, "scan.txt", text, "text/plain")
+
+    # Extraction needs Claude; without a key the endpoint says so instead of guessing.
+    assert response.status_code == 503
+    assert "ANTHROPIC_API_KEY" in response.json()["error"]
+
+
+def test_ingest_rejects_unknown_types_and_empty_documents(client: TestClient) -> None:
+    assert ingest(client, "virus.exe", b"MZ").status_code == 415
+    assert ingest(client, "blank.txt", b"   \n", "text/plain").status_code == 422
+
+
+def test_bulk_stamps_the_requested_source(client: TestClient) -> None:
+    preview = preview_for(client, "vendor_export.csv")
+    payload = drafts_to_bulk(preview)
+    payload["invoices"] = payload["invoices"][:1]
+    payload["source"] = "uploaded"
+
+    body = client.post("/invoices/bulk", json=payload).json()
+
+    assert body["created"][0]["source"] == "uploaded"
+    # An extracted document without line items is flagged, unlike a summary-level import.
+    assert body["created"][0]["needs_review"] is True

@@ -428,9 +428,7 @@ def collect_warnings(
     if not mapping.vendor_name:
         warnings.append("No vendor column was found; vendor names are blank and need review.")
 
-    flagged = sum(1 for draft in drafts if draft.needs_review)
-    if flagged:
-        warnings.append(f"{flagged} of {len(drafts)} invoice(s) need review before saving.")
+    # Per-row review flags are visible on the rows themselves; they are not a file-level warning.
     return warnings
 
 

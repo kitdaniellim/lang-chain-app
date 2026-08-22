@@ -10,6 +10,8 @@
   --surface-3: #252b36;
   --border: #2a313d;
   --border-strong: #3a4351;
+  /* Dashed dropzone edge: light enough to clear 3:1 against --surface-2. */
+  --border-dashed: #626d7d;
   --text: #e7ebf2;
   --muted: #9aa4b4;
   --accent: #6ea8fe;
@@ -26,7 +28,7 @@
   --accent-bg: rgb(110 168 254 / 0.14);
   --focus: #9ecbff;
 
-  /* Spacing — 4 px scale */
+  /* Spacing: 4 px scale */
   --sp-1: 4px;
   --sp-2: 8px;
   --sp-3: 12px;
@@ -60,12 +62,24 @@
   /* Ergonomics */
   --tap: 44px;
   --sidebar-w: 360px;
+
+  /* Motion. Durations stay under 300 ms except the drawer, which is allowed 200-500 ms. */
   --dur: 180ms;
+  --dur-press: 120ms;
+  --dur-enter: 160ms;
+  --dur-drawer: 300ms;
   --ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
+  --stagger: 30ms;
 }
 
 @media (prefers-reduced-motion: reduce) {
   :root {
     --dur: 1ms;
+    --dur-press: 1ms;
+    --dur-enter: 1ms;
+    --dur-drawer: 1ms;
+    --stagger: 0ms;
   }
 }

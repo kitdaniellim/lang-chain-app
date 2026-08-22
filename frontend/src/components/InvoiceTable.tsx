@@ -1,7 +1,5 @@
 import type { InvoiceOut } from "../api/types";
-import { formatDate, formatMoney } from "../lib/format";
-import { ReviewBadge } from "./ReviewBadge";
-import { StatusPill } from "./StatusPill";
+import { InvoiceCells, InvoiceHeaderCells } from "./InvoiceCells";
 
 interface InvoiceTableProps {
   invoices: InvoiceOut[];
@@ -100,43 +98,23 @@ export function InvoiceTable({
             </caption>
             <thead>
               <tr>
-                <th scope="col">Vendor</th>
-                <th scope="col">Invoice #</th>
-                <th scope="col">Date</th>
-                <th scope="col">Due</th>
-                <th scope="col" className="col-amount">
-                  Total
-                </th>
-                <th scope="col">Status</th>
+                <InvoiceHeaderCells />
                 <th scope="col">Source</th>
               </tr>
             </thead>
             <tbody>
               {rows.map((invoice) => (
                 <tr key={invoice.id}>
-                  <th scope="row" className="cell-vendor">
-                    {invoice.vendor_name}
-                    {invoice.vendor_email && (
-                      <span className="cell-vendor__email">{invoice.vendor_email}</span>
-                    )}
-                  </th>
-                  <td className="cell-ref">{invoice.invoice_number}</td>
-                  <td className="cell-date">{formatDate(invoice.invoice_date)}</td>
-                  <td className="cell-date">{formatDate(invoice.due_date)}</td>
-                  <td className="col-amount">{formatMoney(invoice.total, invoice.currency)}</td>
+                  <InvoiceCells
+                    invoice={invoice}
+                    needsReview={invoice.needs_review}
+                    reviewNotes={invoice.review_notes}
+                    rowKey={String(invoice.id)}
+                  />
                   <td>
-                    <div className="cell-status">
-                      <StatusPill status={invoice.status} />
-                      {invoice.needs_review && (
-                        <ReviewBadge
-                          notes={invoice.review_notes}
-                          invoiceLabel={String(invoice.id)}
-                        />
-                      )}
-                    </div>
-                  </td>
-                  <td>
-                    <span className="tag-source">{SOURCE_LABELS[invoice.source] ?? invoice.source}</span>
+                    <span className="tag-source">
+                      {SOURCE_LABELS[invoice.source] ?? invoice.source}
+                    </span>
                   </td>
                 </tr>
               ))}

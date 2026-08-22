@@ -1,4 +1,4 @@
-// Wire types mirroring backend/app/schemas.py — snake_case is kept exactly as sent.
+// Wire types mirroring backend/app/schemas.py; snake_case is kept exactly as sent.
 
 export type InvoiceStatus = "paid" | "pending" | "overdue";
 
@@ -27,7 +27,7 @@ export interface Invoice {
   status: InvoiceStatus;
 }
 
-/** Body of POST /invoices — the extracted invoice, possibly edited by the user. */
+/** One invoice draft on the wire, with the document text it came from. */
 export interface InvoiceDraft extends Invoice {
   raw_text?: string | null;
 }
@@ -39,17 +39,6 @@ export interface InvoiceOut extends Invoice {
   review_notes: string[];
   source: InvoiceSource;
   created_at: string; // ISO datetime
-}
-
-export interface ExtractRequest {
-  text: string;
-}
-
-export interface ExtractResponse {
-  invoice: Invoice;
-  needs_review: boolean;
-  review_notes: string[];
-  model: string;
 }
 
 export interface ChatRequest {
@@ -72,9 +61,9 @@ export interface ErrorResponse {
   error: string;
 }
 
-// --------------------------------------------------------------- structured-file import
+// --------------------------------------------------------------- file ingest
 // A CSV/JSON/XLSX export rarely uses our column names: Claude fills ColumnMapping, then
-// deterministic backend code applies it and returns a previewable ImportPreview.
+// deterministic backend code applies it and returns a previewable IngestPreview.
 
 /** invoice: one row per invoice; line_item: one row per billed line, grouped by invoice number. */
 export type RowGranularity = "invoice" | "line_item";
@@ -90,7 +79,7 @@ export interface ColumnMapping {
   invoice_date: string | null;
   due_date: string | null;
   currency: string | null;
-  /** ISO 4217 code assumed when there is no currency column — a value, not a column name. */
+  /** ISO 4217 code assumed when there is no currency column: a value, not a column name. */
   currency_default: string | null;
   status: string | null;
   subtotal: string | null;
@@ -117,21 +106,30 @@ export interface ImportedDraft {
   source_rows: number[];
 }
 
-/** Response of POST /invoices/import — nothing is stored until the user confirms. */
-export interface ImportPreview {
+/**
+ * Response of POST /invoices/ingest: one shape for any uploaded file.
+ * `extracted` means an unstructured document went through Claude and produced one draft;
+ * `imported` means a structured export was column-mapped into N drafts.
+ */
+export interface IngestPreview {
   filename: string;
-  row_count: number;
-  headers: string[];
-  mapping: ColumnMapping;
-  mapping_source: "claude" | "heuristic";
+  kind: "extracted" | "imported";
   model: string | null;
+  mapping: ColumnMapping | null;
+  mapping_source: "claude" | "heuristic" | null;
   invoices: ImportedDraft[];
   unmapped_columns: string[];
   warnings: string[];
+  /** The document text, for `kind === "extracted"` only. */
+  raw_text: string | null;
 }
+
+/** Where the drafts came from; the server validates line items only for "uploaded". */
+export type IngestSource = "uploaded" | "imported";
 
 export interface BulkCreateRequest {
   invoices: InvoiceDraft[];
+  source: IngestSource;
 }
 
 export interface SkippedInvoice {

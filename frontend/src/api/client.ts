@@ -2,11 +2,12 @@
 
 import { mockApi } from "./mock";
 import type {
+  BulkCreateRequest,
   BulkCreateResponse,
   ChatResponse,
-  ExtractResponse,
   HealthResponse,
-  ImportPreview,
+  IngestPreview,
+  IngestSource,
   InvoiceDraft,
   InvoiceOut,
 } from "./types";
@@ -74,35 +75,22 @@ export function getInvoices(signal?: AbortSignal): Promise<InvoiceOut[]> {
   return fetchJson<InvoiceOut[]>("/invoices", { signal });
 }
 
-export function extractFromText(text: string): Promise<ExtractResponse> {
-  if (USE_MOCK) return mockApi.extract();
-  return fetchJson<ExtractResponse>("/invoices/extract", jsonPost({ text }));
-}
-
-export function extractFromFile(file: File): Promise<ExtractResponse> {
-  if (USE_MOCK) return mockApi.extract();
+/** Any supported file in, invoice drafts out; nothing is stored until bulkCreate. */
+export function ingestFile(file: File): Promise<IngestPreview> {
+  if (USE_MOCK) return mockApi.ingest(file);
   const form = new FormData();
   form.append("file", file);
-  return fetchJson<ExtractResponse>("/invoices/upload", { method: "POST", body: form });
-}
-
-export function saveInvoice(draft: InvoiceDraft): Promise<InvoiceOut> {
-  if (USE_MOCK) return mockApi.save(draft);
-  return fetchJson<InvoiceOut>("/invoices", jsonPost(draft));
-}
-
-/** Maps a .csv/.json/.xlsx export onto invoices; nothing is stored until bulkCreate. */
-export function importFile(file: File): Promise<ImportPreview> {
-  if (USE_MOCK) return mockApi.importFile(file);
-  const form = new FormData();
-  form.append("file", file);
-  return fetchJson<ImportPreview>("/invoices/import", { method: "POST", body: form });
+  return fetchJson<IngestPreview>("/invoices/ingest", { method: "POST", body: form });
 }
 
 /** Creates the reviewed drafts in one request; the server reports what it skipped. */
-export function bulkCreate(invoices: InvoiceDraft[]): Promise<BulkCreateResponse> {
-  if (USE_MOCK) return mockApi.bulkCreate(invoices);
-  return fetchJson<BulkCreateResponse>("/invoices/bulk", jsonPost({ invoices }));
+export function bulkCreate(
+  invoices: InvoiceDraft[],
+  source: IngestSource,
+): Promise<BulkCreateResponse> {
+  if (USE_MOCK) return mockApi.bulkCreate(invoices, source);
+  const body: BulkCreateRequest = { invoices, source };
+  return fetchJson<BulkCreateResponse>("/invoices/bulk", jsonPost(body));
 }
 
 export function askQuestion(question: string): Promise<ChatResponse> {

@@ -23,6 +23,8 @@ from app.schemas import (
     ExtractRequest,
     ExtractResponse,
     ImportPreview,
+    ImportedDraft,
+    IngestPreview,
     InvoiceDraft,
     InvoiceOut,
     SkippedInvoice,
@@ -134,6 +136,74 @@ def import_preview(
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from exc
 
 
+IMPORT_SUFFIXES = (".csv", ".json", ".xlsx")
+DOCUMENT_SUFFIXES = TEXT_SUFFIXES + (".pdf",)
+
+
+@router.post("/invoices/ingest", response_model=IngestPreview)
+def ingest(file: UploadFile = File(...), settings: Settings = Depends(get_settings)) -> IngestPreview:
+    """Any file in, invoice drafts out: documents go through extraction, exports through column mapping."""
+    payload = file.file.read()
+    if len(payload) > MAX_UPLOAD_BYTES:
+        raise HTTPException(
+            status.HTTP_413_CONTENT_TOO_LARGE,
+            f"{file.filename} is {len(payload)} bytes; the limit is {MAX_UPLOAD_BYTES} bytes.",
+        )
+    name = (file.filename or "").lower()
+
+    if name.endswith(IMPORT_SUFFIXES):
+        try:
+            preview = build_preview(file.filename or "upload.csv", payload, settings)
+        except UnsupportedFile as exc:
+            raise HTTPException(status.HTTP_415_UNSUPPORTED_MEDIA_TYPE, str(exc)) from exc
+        except FileTooLarge as exc:
+            raise HTTPException(status.HTTP_413_CONTENT_TOO_LARGE, str(exc)) from exc
+        except FileParseError as exc:
+            raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from exc
+        return IngestPreview(
+            filename=preview.filename,
+            kind="imported",
+            model=preview.model,
+            mapping=preview.mapping,
+            mapping_source=preview.mapping_source,
+            invoices=preview.invoices,
+            unmapped_columns=preview.unmapped_columns,
+            warnings=preview.warnings,
+            raw_text=None,
+        )
+
+    if name.endswith(DOCUMENT_SUFFIXES):
+        text = _text_from_upload(file, payload)
+        if len(text.strip()) < 20:
+            raise HTTPException(
+                status.HTTP_422_UNPROCESSABLE_CONTENT, f"{file.filename} contains no readable invoice text."
+            )
+        extracted = _run_extraction(text, settings)
+        draft = ImportedDraft(
+            invoice=extracted.invoice,
+            needs_review=extracted.needs_review,
+            review_notes=extracted.review_notes,
+            import_notes=[],
+            source_rows=[],
+        )
+        return IngestPreview(
+            filename=file.filename or "upload.txt",
+            kind="extracted",
+            model=extracted.model,
+            mapping=None,
+            mapping_source=None,
+            invoices=[draft],
+            unmapped_columns=[],
+            warnings=[],
+            raw_text=text,
+        )
+
+    raise HTTPException(
+        status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
+        f"Unsupported file type {file.filename!r}. Upload a .pdf, .txt, .md, .csv, .json or .xlsx file.",
+    )
+
+
 @router.post("/invoices/bulk", response_model=BulkCreateResponse, status_code=status.HTTP_201_CREATED)
 def bulk_create(body: BulkCreateRequest, session: Session = Depends(get_session)) -> BulkCreateResponse:
     """Insert confirmed import drafts in one transaction; duplicates are skipped, not fatal."""
@@ -164,8 +234,9 @@ def bulk_create(body: BulkCreateRequest, session: Session = Depends(get_session)
             continue
         seen.add(number)
         invoice = round_money(draft)
-        # Imports may come from summary-level files; missing line detail is not a review flag there.
-        rows.append(to_row(invoice, validate_invoice(invoice, require_line_items=False), "imported", raw_text=None))
+        # Structured exports may be summary-level; an extracted document should really have line items.
+        notes = validate_invoice(invoice, require_line_items=body.source == "uploaded")
+        rows.append(to_row(invoice, notes, body.source, raw_text=draft.raw_text))
 
     session.add_all(rows)
     try:

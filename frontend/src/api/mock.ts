@@ -4,9 +4,10 @@
 import type {
   BulkCreateResponse,
   ChatResponse,
-  ExtractResponse,
   HealthResponse,
-  ImportPreview,
+  IngestPreview,
+  IngestSource,
+  Invoice,
   InvoiceDraft,
   InvoiceOut,
   SkippedInvoice,
@@ -69,7 +70,7 @@ export const MOCK_INVOICES: InvoiceOut[] = [
     due_date: "2026-07-31",
     currency: "USD",
     line_items: [
-      { description: "Compute — reserved instances (July)", quantity: 1, unit_price: 1840.0, amount: 1840.0 },
+      { description: "Compute, reserved instances (July)", quantity: 1, unit_price: 1840.0, amount: 1840.0 },
       { description: "Object storage, 4.2 TB", quantity: 4.2, unit_price: 23.0, amount: 96.6 },
       { description: "Egress overage", quantity: 1, unit_price: 63.4, amount: 63.4 },
     ],
@@ -91,7 +92,7 @@ export const MOCK_INVOICES: InvoiceOut[] = [
     invoice_date: "2026-07-18",
     due_date: "2026-09-01",
     currency: "EUR",
-    line_items: [{ description: "Brand refresh — phase 2", quantity: 1, unit_price: 4200.0, amount: 4200.0 }],
+    line_items: [{ description: "Brand refresh, phase 2", quantity: 1, unit_price: 4200.0, amount: 4200.0 }],
     subtotal: 4200.0,
     tax: 798.0,
     total: 4998.0,
@@ -156,48 +157,60 @@ export const MOCK_HEALTH: HealthResponse = {
   model: "claude-sonnet-5",
 };
 
-const MOCK_EXTRACT: ExtractResponse = {
-  invoice: {
-    invoice_number: "ACME-2026-0042",
-    vendor_name: "Acme Fabrication Ltd.",
-    vendor_email: "billing@acmefab.example",
-    invoice_date: "2026-08-19",
-    due_date: "2026-09-18",
-    currency: "USD",
-    line_items: [
-      { description: "CNC bracket, aluminium 6061", quantity: 25, unit_price: 18.4, amount: 460.0 },
-      { description: "Powder coating", quantity: 25, unit_price: 3.6, amount: 90.0 },
-      { description: "Tooling setup", quantity: 1, unit_price: 150.0, amount: 150.0 },
-    ],
-    subtotal: 700.0,
-    tax: 56.0,
-    total: 756.0,
-    po_number: "PO-90210",
-    status: "pending",
-  },
-  needs_review: false,
-  review_notes: [],
+const MOCK_EXTRACTED_INVOICE: Invoice = {
+  invoice_number: "ACME-2026-0042",
+  vendor_name: "Acme Fabrication Ltd.",
+  vendor_email: "billing@acmefab.example",
+  invoice_date: "2026-08-19",
+  due_date: "2026-09-18",
+  currency: "USD",
+  line_items: [
+    { description: "CNC bracket, aluminium 6061", quantity: 25, unit_price: 18.4, amount: 460.0 },
+    { description: "Powder coating", quantity: 25, unit_price: 3.6, amount: 90.0 },
+    { description: "Tooling setup", quantity: 1, unit_price: 150.0, amount: 150.0 },
+  ],
+  subtotal: 700.0,
+  tax: 56.0,
+  total: 756.0,
+  po_number: "PO-90210",
+  status: "pending",
+};
+
+const MOCK_RAW_TEXT = `INVOICE ACME-2026-0042
+Acme Fabrication Ltd. / billing@acmefab.example
+Date: 2026-08-19   Due: 2026-09-18   PO: PO-90210
+
+25 x CNC bracket, aluminium 6061 @ 18.40   460.00
+25 x Powder coating @ 3.60                  90.00
+ 1 x Tooling setup @ 150.00                150.00
+
+Subtotal 700.00   Tax 56.00   Total due USD 756.00`;
+
+/** A .pdf/.txt/.md upload: Claude extracts exactly one invoice and returns the source text. */
+export const MOCK_INGEST_EXTRACTED: IngestPreview = {
+  filename: "acme-2026-0042.txt",
+  kind: "extracted",
   model: "claude-sonnet-5",
+  mapping: null,
+  mapping_source: null,
+  invoices: [
+    {
+      invoice: MOCK_EXTRACTED_INVOICE,
+      needs_review: false,
+      review_notes: [],
+      import_notes: [],
+      source_rows: [],
+    },
+  ],
+  unmapped_columns: [],
+  warnings: [],
+  raw_text: MOCK_RAW_TEXT,
 };
 
 /** A line-item-granularity ledger export: two grouped invoices, one single-row invoice. */
-export const MOCK_IMPORT_PREVIEW: ImportPreview = {
+export const MOCK_INGEST_IMPORTED: IngestPreview = {
   filename: "ledger-export-aug.csv",
-  row_count: 7,
-  headers: [
-    "Supplier",
-    "Inv No",
-    "Bill Date",
-    "Pay By",
-    "Item",
-    "Qty",
-    "Unit",
-    "Line Total",
-    "Tax",
-    "Amount Due",
-    "State",
-    "Cost Centre",
-  ],
+  kind: "imported",
   mapping: {
     granularity: "line_item",
     invoice_number: "Inv No",
@@ -221,11 +234,12 @@ export const MOCK_IMPORT_PREVIEW: ImportPreview = {
     status_values: { Settled: "paid", Open: "pending", "Past due": "overdue" },
     notes: [
       "No currency column: the amounts use £ and every supplier is UK-based, so GBP is assumed.",
-      "Dates read as day/month/year — 04/08/2026 is 4 August 2026, not 8 April.",
+      "Dates read as day/month/year, so 04/08/2026 is 4 August 2026, not 8 April.",
     ],
   },
   mapping_source: "claude",
   model: "claude-sonnet-5",
+  raw_text: null,
   unmapped_columns: ["Cost Centre"],
   warnings: [
     "Row 8 has no value in “Inv No” and was skipped.",
@@ -243,7 +257,7 @@ export const MOCK_IMPORT_PREVIEW: ImportPreview = {
         line_items: [
           { description: "Oak boarding, 22 mm (m²)", quantity: 48, unit_price: 31.5, amount: 1512.0 },
           { description: "Softwood battens (m)", quantity: 120, unit_price: 2.85, amount: 342.0 },
-          { description: "Delivery — 2 pallets", quantity: 1, unit_price: 65.0, amount: 65.0 },
+          { description: "Delivery, 2 pallets", quantity: 1, unit_price: 65.0, amount: 65.0 },
         ],
         subtotal: 1919.0,
         tax: 383.8,
@@ -327,29 +341,23 @@ function delay<T>(value: T, ms = 320): Promise<T> {
   return new Promise((resolve) => setTimeout(() => resolve(value), ms));
 }
 
+const IMPORT_SUFFIXES = [".csv", ".json", ".xlsx"];
+
 export const mockApi = {
   health: () => delay(MOCK_HEALTH, 120),
   invoices: () => delay([...MOCK_INVOICES]),
-  extract: () => delay(structuredClone(MOCK_EXTRACT), 900),
   chat: (question: string) =>
     delay({ ...MOCK_CHAT, answer: `${MOCK_CHAT.answer} (asked: "${question}")` }, 900),
-  save: (draft: InvoiceDraft): Promise<InvoiceOut> => {
-    const { raw_text: _rawText, ...invoice } = draft;
-    const saved: InvoiceOut = {
-      ...invoice,
-      id: nextId++,
-      needs_review: false,
-      review_notes: [],
-      source: "extracted",
-      created_at: new Date().toISOString(),
-    };
-    MOCK_INVOICES.unshift(saved);
-    return delay(saved, 500);
+  /** Mirrors /invoices/ingest: structured exports are mapped, documents are extracted. */
+  ingest: (file: File): Promise<IngestPreview> => {
+    const name = file.name.toLowerCase();
+    const fixture = IMPORT_SUFFIXES.some((suffix) => name.endsWith(suffix))
+      ? MOCK_INGEST_IMPORTED
+      : MOCK_INGEST_EXTRACTED;
+    return delay({ ...structuredClone(fixture), filename: file.name }, 900);
   },
-  importFile: (file: File): Promise<ImportPreview> =>
-    delay({ ...structuredClone(MOCK_IMPORT_PREVIEW), filename: file.name }, 900),
   /** Mirrors the server: creates what it can, skips invoice numbers already stored. */
-  bulkCreate: (drafts: InvoiceDraft[]): Promise<BulkCreateResponse> => {
+  bulkCreate: (drafts: InvoiceDraft[], source: IngestSource): Promise<BulkCreateResponse> => {
     const created: InvoiceOut[] = [];
     const skipped: SkippedInvoice[] = [];
     for (const draft of drafts) {
@@ -366,7 +374,7 @@ export const mockApi = {
         id: nextId++,
         needs_review: false,
         review_notes: [],
-        source: "imported",
+        source,
         created_at: new Date().toISOString(),
       };
       MOCK_INVOICES.unshift(saved);

@@ -121,7 +121,7 @@ export function ChatPanel({ llmConfigured }: ChatPanelProps) {
       <div className="chat__thread" ref={threadRef} aria-live="polite" aria-label="Conversation">
         {messages.length === 0 && !pending && (
           <p className="field__hint">
-            No questions yet — pick a suggestion above or type your own.
+            No questions yet. Pick a suggestion above or type your own.
           </p>
         )}
 

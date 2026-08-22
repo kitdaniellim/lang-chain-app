@@ -35,9 +35,9 @@ const dateFormatter = new Intl.DateTimeFormat(undefined, {
   day: "2-digit",
 });
 
-/** ISO date (or datetime) to a short localized date; returns an em dash when absent/unparsable. */
+/** ISO date (or datetime) to a short localized date; returns a hyphen when absent. */
 export function formatDate(iso: string | null | undefined): string {
-  if (!iso) return "—";
+  if (!iso) return "-";
   const parsed = new Date(iso.length === 10 ? `${iso}T00:00:00` : iso);
   if (Number.isNaN(parsed.getTime())) return iso;
   return dateFormatter.format(parsed);

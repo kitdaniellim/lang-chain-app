@@ -166,6 +166,8 @@ class ImportPreview(BaseModel):
 
 class BulkCreateRequest(BaseModel):
     invoices: list[InvoiceDraft] = Field(min_length=1, max_length=500)
+    # "uploaded" = extracted from an unstructured document; "imported" = mapped from a structured export.
+    source: Literal["uploaded", "imported"] = "imported"
 
 
 class SkippedInvoice(BaseModel):
@@ -176,3 +178,18 @@ class SkippedInvoice(BaseModel):
 class BulkCreateResponse(BaseModel):
     created: list[InvoiceOut]
     skipped: list[SkippedInvoice]
+
+
+class IngestPreview(BaseModel):
+    """One response for any uploaded file: unstructured documents are extracted, exports are mapped."""
+
+    filename: str
+    kind: Literal["extracted", "imported"]
+    model: str | None
+    mapping: ColumnMapping | None
+    mapping_source: Literal["claude", "heuristic"] | None
+    invoices: list[ImportedDraft]
+    unmapped_columns: list[str]
+    warnings: list[str]
+    # The document text for `kind == "extracted"`, so the client can store it with the invoice.
+    raw_text: str | None
