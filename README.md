@@ -62,6 +62,23 @@ agent can only run a single `SELECT`.
 | `npm run seed` | wipe and re-seed the configured database |
 | `npm run dev:backend` / `npm run dev:frontend` | one side only |
 
+## Deploy
+
+The repo ships as **one container**: the Dockerfile builds the React app and FastAPI serves it next to the API from
+the same origin, so a deployment is a single service with a single URL. CI (`.github/workflows/ci.yml`) runs both
+test suites and builds the image on every push.
+
+**Railway** (repo already has `railway.json` with the `/health` check):
+
+1. <https://railway.app> → New Project → *Deploy from GitHub repo* → `kitdaniellim/lang-chain-app`.
+2. Variables: `ANTHROPIC_API_KEY`, `DATABASE_URL` (the Supabase pooler URI). Nothing else is needed; `PORT` is injected.
+3. Settings → Networking → *Generate domain*. The UI, the API and `/health` are all on that domain.
+
+Or from a terminal: `npx @railway/cli login`, then `npx @railway/cli init`, `npx @railway/cli variables set ANTHROPIC_API_KEY=... DATABASE_URL=...`, `npx @railway/cli up`.
+
+Any other Docker host works the same way (Fly.io: `fly launch`; Render: *Web Service → Docker*). Run it locally with
+`docker build -t lang-chain-app . && docker run -p 8000:8000 --env-file .env lang-chain-app`.
+
 ## Where the LangChain pieces live
 
 | Feature | File |
@@ -85,6 +102,7 @@ agent can only run a single `SELECT`.
 | `POST /invoices/ingest` | multipart `file` (.pdf .txt .md .csv .json .xlsx, 2 MB) | `{kind, invoices[], mapping, mapping_source, warnings, raw_text}` |
 | `POST /invoices/bulk` | `{invoices[], source}` | `{created[], skipped[]}` (201) |
 | `POST /chat` | `{question}` | `{answer, sql_query_used}` |
+| `GET /` | | the built UI (production container) |
 
 Also available: `POST /invoices/extract` (`{text}`), `POST /invoices/upload`, `POST /invoices/import`, `POST /invoices`.
 Errors are JSON `{error}`: 422 validation, 413/415 upload limits, 503 no API key, 502 upstream model failure.
@@ -93,6 +111,8 @@ Errors are JSON `{error}`: 422 validation, 413/415 upload limits, 503 no API key
 
 ```
 .env           the only config file (copy of .env.example); never committed
+Dockerfile     one image: built UI + API; railway.json adds the health check
+.github/       ci.yml: pytest, typecheck + vitest, docker build
 scripts/       setup, dev, test, seed (plain Node, no dependencies)
 backend/app/   config, db, models, schemas, validation, extraction, column_mapping, importing,
                file_parsing, sql_tools, query_agent, seed, routers/, main

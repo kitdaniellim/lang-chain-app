@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import os
+from pathlib import Path
+
 import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
@@ -10,6 +13,7 @@ from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.config import get_settings
@@ -96,3 +100,9 @@ def health() -> HealthResponse:
 
 app.include_router(invoices.router)
 app.include_router(chat.router)
+
+
+# Production: the built React app is served from the same origin (see Dockerfile), so one URL does both.
+STATIC_DIR = Path(os.environ.get("STATIC_DIR") or Path(__file__).resolve().parents[2] / "frontend" / "dist")
+if STATIC_DIR.is_dir():
+    app.mount("/", StaticFiles(directory=str(STATIC_DIR), html=True), name="frontend")

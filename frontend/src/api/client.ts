@@ -13,7 +13,8 @@ import type {
   InvoiceQuery,
 } from "./types";
 
-export const API_BASE: string = import.meta.env.VITE_API_URL ?? "http://127.0.0.1:8000";
+// Same origin by default: Vite proxies the API in dev, FastAPI serves the build in production.
+export const API_BASE: string = import.meta.env.VITE_API_URL ?? "";
 
 export const USE_MOCK: boolean = import.meta.env.VITE_USE_MOCK === "true";
 
@@ -43,7 +44,7 @@ export async function fetchJson<T>(path: string, init?: RequestInit): Promise<T>
     response = await fetch(`${API_BASE}${path}`, init);
   } catch (cause) {
     const detail = cause instanceof Error ? cause.message : "network error";
-    throw new ApiError(0, `Cannot reach the API at ${API_BASE} (${detail})`);
+    throw new ApiError(0, `Cannot reach the API at ${API_BASE || window.location.origin} (${detail})`);
   }
 
   const text = await response.text();
