@@ -21,10 +21,6 @@ npm run setup   # once: Python venv + backend deps, frontend deps, creates .env
 npm run dev     # API on http://127.0.0.1:8000, UI on http://localhost:5173
 ```
 
-That is the whole setup. It works offline with no keys: 20 seeded invoices, the table, filters and search.
-
-Requirements: Node 20+ and Python 3.12+ on your PATH.
-
 ### Turn on Claude (extraction + chat)
 
 Put an API key from <https://console.anthropic.com> (Settings, API Keys; usage is billed per token and is separate
@@ -33,19 +29,6 @@ from a Claude Pro/Max subscription) into the root `.env`:
 ```ini
 ANTHROPIC_API_KEY=sk-ant-...
 ```
-
-Restart `npm run dev`. Run `npm run seed` if you want the three raw sample invoices re-seeded through the real
-extractor.
-
-### Use Supabase instead of SQLite (optional)
-
-1. Create a project, then run `backend/migrations/001_invoices.sql` in its SQL editor.
-2. Connect, Connection string, **Session pooler**: copy the URI exactly as shown (the host carries the project's
-   region), change the scheme to `postgresql+psycopg://`, and put it in the root `.env`:
-   ```ini
-   DATABASE_URL=postgresql+psycopg://postgres.<project-ref>:<password>@aws-0-<region>.pooler.supabase.com:5432/postgres
-   ```
-3. Restart `npm run dev`. The header chip switches to Postgres and the seed runs once if the table is empty.
 
 ## What it does
 
