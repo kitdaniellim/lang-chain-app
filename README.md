@@ -1,186 +1,112 @@
-# lang-chain-app — invoice extraction + natural-language querying with LangChain
+# lang-chain-app
 
-A demo web app that shows two LangChain capabilities over invoice data, end to end:
+Invoice extraction and natural-language querying with LangChain. Drop an invoice or an export in any format and
+Claude structures it; ask questions about the data and a LangChain agent answers with SQL it shows you.
 
-1. **Structured extraction** — paste or upload a raw invoice (text or PDF) and Claude fills a Pydantic `Invoice`
-   schema through `model.with_structured_output(Invoice)`. Deterministic validation then checks the arithmetic and
-   dates and flags anything suspicious as **needs review**.
-2. **Natural-language querying** — a LangChain agent (`create_agent` + three SQL tools) answers questions like
-   *"How much have we spent with each vendor?"* against the database and **shows the SQL it ran** in a collapsible
-   "view query" panel. Nothing is hidden: the demo is about what LangChain does under the hood.
+**Stack:** Python 3.12 · FastAPI · SQLAlchemy · `langchain` 1.x · `langchain-anthropic` (`claude-sonnet-5`) · React 19 ·
+Vite · TypeScript · Supabase Postgres (SQLite fallback).
 
-Stack: **Python 3.12 · FastAPI · SQLAlchemy** backend, **React 19 · Vite · TypeScript** frontend,
-**Supabase Postgres** (SQLite fallback for offline dev), `langchain` 1.x, `langchain-anthropic` (`claude-sonnet-5`),
-`langgraph`.
-
-> The previous TypeScript/LangGraph pipeline demo that lived in this repo is preserved under the git tag
-> `ts-langgraph-demo`.
-
----
-
-## 1. Quickstart (works without any keys)
+## Run it
 
 ```bash
-# backend
-cd backend
-python -m venv .venv
-.venv\Scripts\activate            # Windows   (macOS/Linux: source .venv/bin/activate)
-pip install -r requirements.txt
-copy .env.example .env            # edit later: ANTHROPIC_API_KEY, DATABASE_URL
-uvicorn app.main:app --reload --port 8000
-
-# frontend (second terminal)
-cd frontend
-npm install
-npm run dev                       # http://localhost:5173 (Vite picks the next free port if 5173 is busy)
+npm run setup   # once: Python venv + backend deps, frontend deps, .env files
+npm run dev     # API on http://127.0.0.1:8000, UI on http://localhost:5173
 ```
 
-On first start the backend creates the schema (SQLite file `backend/invoices.db` when `DATABASE_URL` is empty) and
-seeds **20 invoices**: 17 generated with Faker (12 fictional vendors, 1–8 line items, USD/EUR/GBP/PHP, a mix of
-paid / pending / overdue, one deliberately inconsistent so the *needs review* badge is visible) plus **3 realistic
-raw invoice texts**. With an `ANTHROPIC_API_KEY` those three go through the real extraction pipeline and are stored
-as `source = extracted` (with their `raw_text`); without a key they are inserted from known values as
-`seed-fallback` so the table is never empty.
+That is the whole setup. It works offline with no keys: 20 seeded invoices, the table, filters and search.
 
-The header chip tells you what mode you're in (`SQLite` / `Postgres`, `Claude: ready` / `key missing`). Extraction and
-chat return a clear `503 {"error": "ANTHROPIC_API_KEY is not set"}` until the key exists; everything else works.
+Requirements: Node 20+ and Python 3.12+ on your PATH.
 
-## 2. Adding the Anthropic API key
+### Turn on Claude (extraction + chat)
 
-The API is billed per token from the Anthropic Console — **a Claude Pro/Max subscription does not include API access**.
+Put an API key from <https://console.anthropic.com> (Settings, API Keys; usage is billed per token and is separate
+from a Claude Pro/Max subscription) into `backend/.env`:
 
-1. Sign in at <https://console.anthropic.com> → **Settings → Billing** → add a payment method or a few dollars of
-   credits (Sonnet 5 is roughly $3 / $15 per million input / output tokens; one chat question costs a fraction of a cent).
-2. **Settings → API Keys → Create Key**, copy it once.
-3. `backend/.env`:
+```ini
+ANTHROPIC_API_KEY=sk-ant-...
+```
+
+Restart `npm run dev`. Run `npm run seed` if you want the three raw sample invoices re-seeded through the real
+extractor.
+
+### Use Supabase instead of SQLite (optional)
+
+1. Create a project, then run `backend/migrations/001_invoices.sql` in its SQL editor.
+2. Connect, Connection string, **Session pooler**: copy the URI exactly as shown (the host carries the project's
+   region), change the scheme to `postgresql+psycopg://`, and put it in `backend/.env`:
    ```ini
-   ANTHROPIC_API_KEY=sk-ant-...
-   ANTHROPIC_MODEL=claude-sonnet-5
+   DATABASE_URL=postgresql+psycopg://postgres.<project-ref>:<password>@aws-0-<region>.pooler.supabase.com:5432/postgres
    ```
-4. Restart uvicorn. Delete `backend/invoices.db` (or run `python -m app.seed --force`) if you want the three raw
-   samples re-seeded through the real extractor.
+3. Restart `npm run dev`. The header chip switches to Postgres and the seed runs once if the table is empty.
 
-`.env` is gitignored. Never commit or paste the key.
+## What it does
 
-## 3. Using Supabase
+| In the UI | Under the hood |
+|---|---|
+| **Invoices table** with search, status / source / sort filters, a needs-review toggle and pagination | `GET /invoices?q=&status=&needs_review=&source=&sort=&order=&page=&page_size=` |
+| **Add invoice**: drop a PDF, text, CSV, JSON or Excel file; extraction starts on its own; rows preview in the table format; Save | `POST /invoices/ingest` routes documents to `with_structured_output(Invoice)` and exports to a Claude-filled `ColumnMapping`; `POST /invoices/bulk` saves |
+| **Needs review** badge | deterministic validation after extraction: line sums, subtotal + tax = total, due date after issue date, currency |
+| **Chat with our Agent**: questions like "Which invoices are overdue?" with a **view query** disclosure | `create_agent` + three `@tool`s (`list_tables`, `describe_table`, read-only `run_sql`); every executed statement is returned as `sql_query_used` |
 
-1. Create a project at <https://supabase.com/dashboard> (or let the Supabase MCP do it).
-2. Apply `backend/migrations/001_invoices.sql` in the SQL editor (it creates `invoices` with `jsonb` columns and the
-   indexes; `create_all` would also work but the migration is the source of truth for Postgres).
-3. **Connect → Connection string → Session pooler** (port 5432, IPv4-friendly), copy the URI **exactly as shown** —
-   the host encodes the region the project actually lives in (e.g. `aws-0-ap-northeast-1`) and must not be edited —
-   then change its scheme to `postgresql+psycopg://`. URL-encode the password if it contains special characters:
-   ```ini
-   DATABASE_URL=postgresql+psycopg://postgres.<project-ref>:<db-password>@aws-0-<region>.pooler.supabase.com:5432/postgres
-   ```
-4. Restart uvicorn — the health chip switches to `Postgres` and the seed runs once if the table is empty.
+Design principle: the model does language work (reading a messy document, mapping foreign column names, writing
+SQL); arithmetic, dates and safety are deterministic code. `needs_review` is never the model's opinion and the
+agent can only run a single `SELECT`.
 
-The backend connects with the database role directly (no RLS, no anon key) — fine for a demo, not for multi-tenant use.
+## Commands
 
-## 4. What you can do in the UI
+| Command | What it does |
+|---|---|
+| `npm run setup` | create `backend/.venv`, install Python and npm dependencies, create `backend/.env` and `frontend/.env` from the examples (safe to re-run) |
+| `npm run dev` | start both servers with prefixed logs; Ctrl-C stops both |
+| `npm test` | backend pytest (174 tests, no network) then frontend typecheck + Vitest |
+| `npm run seed` | wipe and re-seed the configured database |
+| `npm run dev:backend` / `npm run dev:frontend` | one side only |
 
-- **Invoice table** — vendor, invoice #, date, due date, total in the invoice's currency, status pill
-  (paid / pending / overdue), **Needs review** badge that expands to the validation notes, and the row's source
-  (`seed`, `seed (fallback)`, `extracted`, `uploaded`).
-- **Add invoice** — paste text or upload `.txt` / `.md` / `.pdf` → *Extract with LangChain* → review and edit the
-  extracted fields and line items, read the validation notes → *Save invoice*.
-- **Import file** — upload a CSV / JSON / XLSX export from *any* system, with whatever column names it uses
-  (`Supplier`, `Inv No`, `Pay By`, `Amount Due`… or nested JSON keys like `Beleg.Nummer`, `Betrag.Brutto`). Claude fills
-  a `ColumnMapping` once per file (which column feeds which field, one row per invoice or per line item, date order,
-  currency default, and a translation of the status vocabulary — `bezahlt → paid`); deterministic code then converts
-  every row (European `1.250,00 €` amounts, `DD.MM.YYYY` dates, derived subtotals with a note), validates it and shows
-  a preview with the mapping, notes and a needs-review badge before anything is saved. Works without a key via a
-  heuristic mapper.
-- **Ask about the invoices** (right sidebar) — type a question or click a suggestion. Each answer has a
-  **view query** disclosure showing every SQL statement the agent executed.
+## Where the LangChain pieces live
 
-Questions the agent handles well: *How much have we spent with each vendor?* · *Which invoices are overdue?* ·
-*What's the total outstanding balance?* · *Show me all invoices over $1000* · *Which vendor do we owe the most?*
+| Feature | File |
+|---|---|
+| Pydantic `Invoice` schema as the extraction contract (field descriptions are the instructions) | `backend/app/schemas.py` |
+| `ChatPromptTemplate` + `with_structured_output(Invoice)` | `backend/app/extraction.py` |
+| Column mapping of arbitrary exports with `with_structured_output(ColumnMapping)`, incl. status-vocabulary translation | `backend/app/column_mapping.py` |
+| Deterministic application of a mapping (money, dates, grouping, derivations as `import_notes`) | `backend/app/importing.py` |
+| `@tool` SQL tools with a read-only guard and executed-SQL capture | `backend/app/sql_tools.py` |
+| `create_agent` with a schema-introspected system prompt | `backend/app/query_agent.py` |
+| Deterministic validation and status derivation | `backend/app/validation.py` |
+| Seed: Faker data plus three raw documents through the real extractor | `backend/app/seed.py` |
+| Testing LLM code without the network (structured-output and tool-calling fakes) | `backend/tests/fakes.py` |
 
-## 5. Architecture
-
-```
- React (Vite)                          FastAPI                                   Claude (langchain-anthropic)
- ┌──────────────────┐   GET /invoices  ┌──────────────────────────────────┐
- │ InvoiceTable     │◄────────────────►│ routers/invoices.py              │
- │ AddInvoiceDrawer │  POST /invoices/ │   extraction.py ─ prompt | model.with_structured_output(Invoice) ──► claude-sonnet-5
- │                  │  extract|upload  │   validation.py ─ deterministic checks → needs_review + notes
- │                  │  POST /invoices  │   seed.py ─ Faker + 3 raw samples through the extractor
- │ ChatPanel        │   POST /chat     │ routers/chat.py                  │
- │  └ view query    │◄────────────────►│   query_agent.py ─ create_agent(model, tools, system_prompt) ──► claude-sonnet-5
- └──────────────────┘                  │   sql_tools.py ─ @tool list_tables / describe_table / run_sql (read-only, SQL captured)
-                                       └──────────────┬───────────────────┘
-                                                      │ SQLAlchemy
-                                         Supabase Postgres  (or SQLite fallback)
-```
-
-**Design principle:** the model does language work (reading a messy document, writing SQL, phrasing the answer);
-arithmetic, date logic and safety are deterministic code. `needs_review` is never the model's opinion, and the
-agent can only ever run a single `SELECT`.
-
-## 6. Where each LangChain feature lives
-
-| Feature | Where | What to look at |
-|---|---|---|
-| Pydantic schema as the extraction contract | `backend/app/schemas.py` `Invoice` | `Field(description=…)` texts are sent to the model as instructions |
-| `with_structured_output` | `backend/app/extraction.py` | `prompt \| ChatAnthropic(...).with_structured_output(Invoice)` |
-| `ChatPromptTemplate` | `backend/app/extraction.py` | system prompt: copy values, never recompute totals, ISO dates, currency inference |
-| Deterministic validation after extraction | `backend/app/validation.py` | line sum, subtotal+tax, due ≥ invoice date, currency, derived `overdue` |
-| `@tool` functions | `backend/app/sql_tools.py` | `list_tables`, `describe_table`, `run_sql` closed over one SQLAlchemy engine |
-| Read-only SQL guard | `backend/app/sql_tools.py` `guard_query` | single statement, whole-statement keyword scan (CTE writes rejected), `LIMIT` enforced, Postgres `statement_timeout` |
-| SQL capture for transparency | `backend/app/sql_tools.py` `executed_sql` | a `ContextVar` list that is mutated (tools run in a copied context) |
-| `create_agent` (LangChain 1.x agent loop on LangGraph) | `backend/app/query_agent.py` | system prompt built from live schema introspection; `recursion_limit` 12 |
-| `sql_query_used` in the API | `backend/app/query_agent.py` → `POST /chat` | every executed statement, joined; rendered in the UI's "view query" |
-| Extraction in the seed | `backend/app/seed.py` | three raw documents through the real pipeline when a key exists |
-| Schema mapping with `with_structured_output` | `backend/app/column_mapping.py` `llm_mapping` | Claude fills `ColumnMapping` from headers + sample rows + distinct values; columns it invents are dropped with a note |
-| Deterministic application of a mapping | `backend/app/importing.py` | money/date/status parsers, grouping by granularity, derivations recorded as `import_notes` |
-| Testing LLM code without network | `backend/tests/fakes.py` | structured-output fake, scripted tool-calling fake for the agent loop |
-
-## 7. API
+## API
 
 | Method & path | Body | Response |
 |---|---|---|
-| `GET /health` | — | `{ok, database, llm_configured, model}` |
-| `GET /invoices` | — | `InvoiceOut[]` newest first |
-| `POST /invoices/extract` | `{text}` | `{invoice, needs_review, review_notes, model}` (no write) |
-| `POST /invoices/upload` | multipart `file` (.txt/.md/.pdf ≤ 2 MB) | same as extract |
-| `POST /invoices` | `InvoiceDraft` (+ optional `raw_text`) | `InvoiceOut` (201); 409 on duplicate invoice number |
-| `POST /invoices/import` | multipart `file` (.csv/.json/.xlsx ≤ 2 MB, ≤ 2 000 rows) | `ImportPreview { mapping, mapping_source, invoices[], unmapped_columns, warnings }` (no write) |
-| `POST /invoices/bulk` | `{ invoices: InvoiceDraft[] }` | `{ created[], skipped[] }` (201); duplicates are skipped with a reason |
+| `GET /health` | | `{ok, database, llm_configured, model}` |
+| `GET /invoices` | query params above | `{items, total, page, page_size}` |
+| `POST /invoices/ingest` | multipart `file` (.pdf .txt .md .csv .json .xlsx, 2 MB) | `{kind, invoices[], mapping, mapping_source, warnings, raw_text}` |
+| `POST /invoices/bulk` | `{invoices[], source}` | `{created[], skipped[]}` (201) |
 | `POST /chat` | `{question}` | `{answer, sql_query_used}` |
 
+Also available: `POST /invoices/extract` (`{text}`), `POST /invoices/upload`, `POST /invoices/import`, `POST /invoices`.
 Errors are JSON `{error}`: 422 validation, 413/415 upload limits, 503 no API key, 502 upstream model failure.
 
-## 8. Project layout
+## Layout
 
 ```
-backend/
-  app/            config, db, models, schemas, validation, extraction, sql_tools, query_agent, seed,
-                  file_parsing, column_mapping, importing, routers/, main
-  migrations/     001_invoices.sql (Supabase / Postgres DDL)
-  tests/          pytest (169 tests, SQLite, no network)
-  requirements.txt  .env.example
-frontend/
-  src/api/        types mirrored from schemas.py, client, mock (VITE_USE_MOCK=true for UI work without a backend)
-  src/components/ HealthChip, InvoiceTable, StatusPill, ReviewBadge, AddInvoiceDrawer, ChatPanel
-  src/styles/     tokens + app CSS (dark theme, accessible)
-docs/             SPEC.md, PLAN.md, reports/ (build reports + screenshots)
+scripts/       setup, dev, test, seed (plain Node, no dependencies)
+backend/app/   config, db, models, schemas, validation, extraction, column_mapping, importing,
+               file_parsing, sql_tools, query_agent, seed, routers/, main
+backend/tests/ pytest suite; backend/migrations/001_invoices.sql for Supabase
+frontend/src/  api/, components/, lib/, styles/ (plain CSS tokens, dark theme)
+docs/          SPEC.md, PLAN.md, reports/ (build reports and screenshots)
 ```
 
-## 9. Tests
+## Troubleshooting
 
-```bash
-cd backend && .venv\Scripts\python -m pytest -q     # 169 passed
-cd frontend && npm run typecheck && npm test && npm run build
-```
+- **Extraction or chat says the key is missing**: set `ANTHROPIC_API_KEY` in `backend/.env` and restart.
+- **`tenant/user postgres.<ref> not found`**: the pooler host's region does not match the project; copy the host from
+  the Supabase Connect dialog.
+- **`db.<ref>.supabase.co` does not resolve**: the direct host is IPv6-only; use the session pooler URI.
+- **Port 5173 is busy**: Vite picks the next free port and prints it; the API allows any localhost origin.
+- **Fresh data**: `npm run seed` (or delete `backend/invoices.db` when on SQLite).
 
-## 10. Troubleshooting
-
-- **Chat/extract say the key is missing** — `backend/.env` must contain `ANTHROPIC_API_KEY`; restart uvicorn.
-- **CORS error in the browser** — any `localhost`/`127.0.0.1` port is allowed by default; if you serve the frontend
-  elsewhere add it to `CORS_ORIGINS`.
-- **Supabase connection refused** — use the *session pooler* URI on port 5432 with the `postgresql+psycopg://` scheme.
-- **`FATAL: (ENOTFOUND) tenant/user postgres.<ref> not found`** — the pooler host's region doesn't match the project's
-  region; copy the host from the dashboard's Connect dialog instead of typing it.
-- **`db.<ref>.supabase.co` does not resolve** — the direct host is IPv6-only; that's why the pooler URI is used.
-- **I want fresh seed data** — delete `backend/invoices.db` (SQLite) or run `python -m app.seed --force`.
+The earlier TypeScript LangGraph pipeline demo is preserved at git tag `ts-langgraph-demo`.

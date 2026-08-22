@@ -1,13 +1,13 @@
-# frontend — lang-chain-app
+# frontend
 
-React 19 + Vite + TypeScript. Plain CSS (tokens in `src/styles/tokens.css`), no UI framework, dark theme.
+React 19 + Vite + TypeScript, plain CSS tokens, dark theme. Run everything from the repository root:
 
 ```bash
-npm install
-cp .env.example .env        # VITE_API_URL, VITE_USE_MOCK
-npm run dev                 # http://localhost:5173
-npm run build               # tsc -b && vite build
-npm test                    # vitest
+npm run setup   # once
+npm run dev     # API + UI
 ```
 
-Set `VITE_USE_MOCK=true` to run against the fixtures in `src/api/mock.ts` without a backend.
+Frontend-only commands (from this folder): `npm run dev`, `npm test`, `npm run typecheck`, `npm run build`.
+
+`.env` (created by setup from `.env.example`): `VITE_API_URL` (default `http://127.0.0.1:8000`) and
+`VITE_USE_MOCK=true` to work on the UI without a backend (serves `src/api/mock.ts`).
