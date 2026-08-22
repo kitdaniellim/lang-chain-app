@@ -9,7 +9,7 @@ Vite · TypeScript · Supabase Postgres (SQLite fallback).
 ## Run it
 
 ```bash
-npm run setup   # once: Python venv + backend deps, frontend deps, .env files
+npm run setup   # once: Python venv + backend deps, frontend deps, creates .env
 npm run dev     # API on http://127.0.0.1:8000, UI on http://localhost:5173
 ```
 
@@ -20,7 +20,7 @@ Requirements: Node 20+ and Python 3.12+ on your PATH.
 ### Turn on Claude (extraction + chat)
 
 Put an API key from <https://console.anthropic.com> (Settings, API Keys; usage is billed per token and is separate
-from a Claude Pro/Max subscription) into `backend/.env`:
+from a Claude Pro/Max subscription) into the root `.env`:
 
 ```ini
 ANTHROPIC_API_KEY=sk-ant-...
@@ -33,7 +33,7 @@ extractor.
 
 1. Create a project, then run `backend/migrations/001_invoices.sql` in its SQL editor.
 2. Connect, Connection string, **Session pooler**: copy the URI exactly as shown (the host carries the project's
-   region), change the scheme to `postgresql+psycopg://`, and put it in `backend/.env`:
+   region), change the scheme to `postgresql+psycopg://`, and put it in the root `.env`:
    ```ini
    DATABASE_URL=postgresql+psycopg://postgres.<project-ref>:<password>@aws-0-<region>.pooler.supabase.com:5432/postgres
    ```
@@ -56,7 +56,7 @@ agent can only run a single `SELECT`.
 
 | Command | What it does |
 |---|---|
-| `npm run setup` | create `backend/.venv`, install Python and npm dependencies, create `backend/.env` and `frontend/.env` from the examples (safe to re-run) |
+| `npm run setup` | create `backend/.venv`, install Python and npm dependencies, create `.env` from `.env.example` (safe to re-run) |
 | `npm run dev` | start both servers with prefixed logs; Ctrl-C stops both |
 | `npm test` | backend pytest (174 tests, no network) then frontend typecheck + Vitest |
 | `npm run seed` | wipe and re-seed the configured database |
@@ -92,6 +92,7 @@ Errors are JSON `{error}`: 422 validation, 413/415 upload limits, 503 no API key
 ## Layout
 
 ```
+.env           the only config file (copy of .env.example); never committed
 scripts/       setup, dev, test, seed (plain Node, no dependencies)
 backend/app/   config, db, models, schemas, validation, extraction, column_mapping, importing,
                file_parsing, sql_tools, query_agent, seed, routers/, main
@@ -102,7 +103,7 @@ docs/          SPEC.md, PLAN.md, reports/ (build reports and screenshots)
 
 ## Troubleshooting
 
-- **Extraction or chat says the key is missing**: set `ANTHROPIC_API_KEY` in `backend/.env` and restart.
+- **Extraction or chat says the key is missing**: set `ANTHROPIC_API_KEY` in `.env` (repo root) and restart.
 - **`tenant/user postgres.<ref> not found`**: the pooler host's region does not match the project; copy the host from
   the Supabase Connect dialog.
 - **`db.<ref>.supabase.co` does not resolve**: the direct host is IPv6-only; use the session pooler URI.

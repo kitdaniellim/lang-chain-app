@@ -11,5 +11,5 @@ npm test        # pytest (no network) + frontend checks
 Backend-only, from this folder with the venv's Python (`.venv/Scripts/python` on Windows, `.venv/bin/python` elsewhere):
 `-m uvicorn app.main:app --reload --port 8000`, `-m pytest -q`, `-m app.seed --force`.
 
-Settings come from `.env` (see `.env.example`): `ANTHROPIC_API_KEY`, `ANTHROPIC_MODEL`, `DATABASE_URL`.
+Settings come from the repository-root `.env` (see `.env.example` there): `ANTHROPIC_API_KEY`, `ANTHROPIC_MODEL`, `DATABASE_URL`.
 Module map and API are in the root README.
