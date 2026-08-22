@@ -6,6 +6,10 @@ Claude structures it; ask questions about the data and a LangChain agent answers
 **Stack:** Python 3.12 · FastAPI · SQLAlchemy · `langchain` 1.x · `langchain-anthropic` (`claude-sonnet-5`) · React 19 ·
 Vite · TypeScript · Supabase Postgres (SQLite fallback).
 
+<img width="946" height="844" alt="image" src="https://github.com/user-attachments/assets/b8d76665-f7bc-4587-9c8e-0ff28baac957" />
+
+<img width="1587" height="937" alt="image" src="https://github.com/user-attachments/assets/13443192-0885-4a20-b2a8-a31b41d4b5d9" />
+
 <img width="1812" height="1302" alt="image" src="https://github.com/user-attachments/assets/44b3c105-3622-4515-a5dd-3dff16d39468" />
 
 <img width="1981" height="1020" alt="image" src="https://github.com/user-attachments/assets/998944bd-aff5-4b75-b4b9-14f18462551a" />
