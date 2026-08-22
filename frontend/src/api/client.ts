@@ -9,7 +9,8 @@ import type {
   IngestPreview,
   IngestSource,
   InvoiceDraft,
-  InvoiceOut,
+  InvoicePage,
+  InvoiceQuery,
 } from "./types";
 
 export const API_BASE: string = import.meta.env.VITE_API_URL ?? "http://127.0.0.1:8000";
@@ -70,9 +71,22 @@ export function getHealth(signal?: AbortSignal): Promise<HealthResponse> {
   return fetchJson<HealthResponse>("/health", { signal });
 }
 
-export function getInvoices(signal?: AbortSignal): Promise<InvoiceOut[]> {
-  if (USE_MOCK) return mockApi.invoices();
-  return fetchJson<InvoiceOut[]>("/invoices", { signal });
+/** Serialises a query, dropping empty values so the URL only carries active filters. */
+function toSearchParams(query: InvoiceQuery): string {
+  const params = new URLSearchParams();
+  for (const [key, value] of Object.entries(query)) {
+    if (value === undefined || value === null) continue;
+    const text = String(value);
+    if (!text.trim()) continue;
+    params.set(key, text);
+  }
+  const search = params.toString();
+  return search ? `?${search}` : "";
+}
+
+export function listInvoices(query: InvoiceQuery = {}, signal?: AbortSignal): Promise<InvoicePage> {
+  if (USE_MOCK) return mockApi.listInvoices(query);
+  return fetchJson<InvoicePage>(`/invoices${toSearchParams(query)}`, { signal });
 }
 
 /** Any supported file in, invoice drafts out; nothing is stored until bulkCreate. */

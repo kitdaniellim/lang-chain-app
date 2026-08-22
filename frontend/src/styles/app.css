@@ -1248,3 +1248,225 @@ select {
     animation: none;
   }
 }
+
+/* ------------------------------------------------------------------ filters + pager */
+
+/* One row at desktop; the search field is the only part that grows. */
+.filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--sp-3);
+  padding: var(--sp-3) var(--sp-4);
+  border-bottom: 1px solid var(--border);
+}
+
+.filters__field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  min-width: 0;
+}
+
+.filters__field--search {
+  flex: 1 1 260px;
+  min-width: 180px;
+}
+
+.filters__clear {
+  margin-left: auto;
+}
+
+.search {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.search__glyph {
+  position: absolute;
+  left: var(--sp-3);
+  color: var(--muted);
+  pointer-events: none;
+}
+
+.search__input {
+  padding-left: calc(var(--sp-3) + 16px + var(--sp-2));
+  padding-right: var(--tap);
+}
+
+/* Full-height 44 px target sitting inside the field's right edge. */
+.search__clear {
+  position: absolute;
+  inset-block: 0;
+  right: 0;
+  width: var(--tap);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--muted);
+  font-size: 1.125rem;
+  line-height: 1;
+  cursor: pointer;
+  transition:
+    color var(--dur) var(--ease),
+    background var(--dur) var(--ease),
+    transform var(--dur-press) var(--ease-out);
+}
+
+.search__clear:hover {
+  background: var(--surface-2);
+  color: var(--text);
+}
+
+.search__clear:active {
+  transform: scale(0.94);
+}
+
+/* Native select with the arrow drawn in, so it matches .input on the dark ground. */
+.select {
+  width: auto;
+  min-width: 132px;
+  appearance: none;
+  padding-right: var(--sp-8);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%239aa4b4' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right var(--sp-3) center;
+  cursor: pointer;
+}
+
+.select--compact {
+  min-width: 76px;
+}
+
+/* A checkbox wearing a pill; the box stays visible so focus lands somewhere obvious. */
+.toggle-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  min-height: var(--tap);
+  padding: 0 var(--sp-4);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-pill);
+  background: var(--surface-2);
+  color: var(--muted);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    background var(--dur) var(--ease),
+    border-color var(--dur) var(--ease),
+    color var(--dur) var(--ease),
+    transform var(--dur-press) var(--ease-out);
+}
+
+.toggle-pill:hover {
+  border-color: var(--accent);
+  color: var(--text);
+}
+
+.toggle-pill:active {
+  transform: scale(0.97);
+}
+
+.toggle-pill--on {
+  border-color: var(--accent);
+  background: var(--accent-bg);
+  color: var(--accent-strong);
+}
+
+.toggle-pill__input {
+  width: 14px;
+  height: 14px;
+  margin: 0;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+.pager {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: var(--sp-3) var(--sp-4);
+  border-top: 1px solid var(--border);
+}
+
+.pager__range {
+  margin-right: auto;
+  color: var(--muted);
+  font-size: var(--fs-sm);
+}
+
+.pager__size {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+
+/* A page in flight dims the rows it is replacing instead of collapsing the table. */
+.table-wrap {
+  transition: opacity var(--dur) var(--ease-out);
+}
+
+.table-wrap--stale {
+  opacity: 0.55;
+}
+
+/* ------------------------------------------------------------------ chat model label */
+
+.chat__form-head {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+}
+
+.chat__form-head .field__label {
+  margin-right: auto;
+}
+
+.chat__model {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  color: var(--muted);
+  font-size: var(--fs-xs);
+  white-space: nowrap;
+}
+
+.chat__model-dot {
+  width: 7px;
+  height: 7px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--ok);
+}
+
+.chat__model--warn .chat__model-dot {
+  background: var(--warn);
+}
+
+.chat__model-id {
+  font-family: var(--font-mono);
+  font-size: 0.95em;
+}
+
+@media (max-width: 900px) {
+  /* Two rows: search takes the first, the selects and toggle share the second. */
+  .filters__field--search {
+    flex-basis: 100%;
+  }
+
+  .filters__clear {
+    margin-left: 0;
+  }
+
+  .pager__range {
+    flex-basis: 100%;
+    margin-right: 0;
+  }
+}

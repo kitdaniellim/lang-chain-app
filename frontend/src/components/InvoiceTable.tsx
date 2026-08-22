@@ -1,10 +1,24 @@
 import type { InvoiceOut } from "../api/types";
+import type { InvoiceFilters as Filters } from "../lib/useInvoiceQuery";
 import { InvoiceCells, InvoiceHeaderCells } from "./InvoiceCells";
+import { InvoiceFilters } from "./InvoiceFilters";
+import { TablePager } from "./TablePager";
 
 interface InvoiceTableProps {
   invoices: InvoiceOut[];
+  /** Rows matching the current filters; `baseTotal` is the unfiltered count. */
+  total: number;
+  baseTotal: number;
+  page: number;
+  pageSize: number;
   loading: boolean;
   error: string | null;
+  filters: Filters;
+  filtersActive: boolean;
+  onFilterChange: (patch: Partial<Filters>) => void;
+  onClearFilters: () => void;
+  onPageChange: (page: number) => void;
+  onPageSizeChange: (size: number) => void;
   onRetry: () => void;
   onAddInvoice: () => void;
   /** When set, "Add invoice" is disabled and this explains why. */
@@ -19,22 +33,33 @@ const SOURCE_LABELS: Record<InvoiceOut["source"], string> = {
   imported: "imported",
 };
 
-/** Newest invoice date first; ties broken by id so the order never flickers. */
-function byDateDesc(a: InvoiceOut, b: InvoiceOut): number {
-  if (a.invoice_date === b.invoice_date) return b.id - a.id;
-  return a.invoice_date < b.invoice_date ? 1 : -1;
-}
-
 export function InvoiceTable({
   invoices,
+  total,
+  baseTotal,
+  page,
+  pageSize,
   loading,
   error,
+  filters,
+  filtersActive,
+  onFilterChange,
+  onClearFilters,
+  onPageChange,
+  onPageSizeChange,
   onRetry,
   onAddInvoice,
   addDisabledReason,
 }: InvoiceTableProps) {
-  const rows = [...invoices].sort(byDateDesc);
   const showingSkeleton = loading && invoices.length === 0;
+  // A page in flight keeps the previous rows on screen, dimmed, so nothing jumps.
+  const stale = loading && invoices.length > 0;
+
+  function countLabel(): string {
+    if (showingSkeleton) return "Loading…";
+    if (filtersActive) return `${total} of ${baseTotal} invoices`;
+    return `${total} ${total === 1 ? "invoice" : "invoices"}`;
+  }
 
   return (
     <section className="panel" aria-labelledby="invoices-heading">
@@ -43,10 +68,7 @@ export function InvoiceTable({
           Invoices
         </h2>
         <p className="toolbar__count" aria-live="polite">
-          {showingSkeleton
-            ? "Loading…"
-            : `${rows.length} ${rows.length === 1 ? "invoice" : "invoices"}`}
-          {loading && invoices.length > 0 ? " · refreshing…" : ""}
+          {countLabel()}
         </p>
         <button
           type="button"
@@ -59,13 +81,20 @@ export function InvoiceTable({
         </button>
       </div>
 
+      <InvoiceFilters
+        filters={filters}
+        onChange={onFilterChange}
+        onClear={onClearFilters}
+        active={filtersActive}
+      />
+
       {addDisabledReason && (
         <p className="notice notice--warn" style={{ margin: "var(--sp-4)" }}>
           {addDisabledReason}
         </p>
       )}
 
-      {showingSkeleton && (
+      {showingSkeleton && !error && (
         <div className="skeleton-rows" aria-hidden="true">
           {Array.from({ length: 6 }, (_, index) => (
             <div className="skeleton-row" key={index} />
@@ -83,44 +112,65 @@ export function InvoiceTable({
         </div>
       )}
 
-      {!showingSkeleton && !error && rows.length === 0 && (
+      {!showingSkeleton && !error && invoices.length === 0 && (
         <div className="state">
-          <p className="state__title">No invoices yet</p>
-          <p>Add one with “Add invoice”, or seed the backend to populate the table.</p>
+          {filtersActive ? (
+            <>
+              <p className="state__title">No invoices match these filters.</p>
+              <button type="button" className="btn" onClick={onClearFilters}>
+                Clear filters
+              </button>
+            </>
+          ) : (
+            <>
+              <p className="state__title">No invoices yet</p>
+              <p>Add one with “Add invoice”, or seed the backend to populate the table.</p>
+            </>
+          )}
         </div>
       )}
 
-      {!showingSkeleton && !error && rows.length > 0 && (
-        <div className="table-wrap">
-          <table className="invoices">
-            <caption className="visually-hidden">
-              Invoices, newest first: vendor, number, dates, total, status and source.
-            </caption>
-            <thead>
-              <tr>
-                <InvoiceHeaderCells />
-                <th scope="col">Source</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((invoice) => (
-                <tr key={invoice.id}>
-                  <InvoiceCells
-                    invoice={invoice}
-                    needsReview={invoice.needs_review}
-                    reviewNotes={invoice.review_notes}
-                    rowKey={String(invoice.id)}
-                  />
-                  <td>
-                    <span className="tag-source">
-                      {SOURCE_LABELS[invoice.source] ?? invoice.source}
-                    </span>
-                  </td>
+      {!showingSkeleton && !error && invoices.length > 0 && (
+        <>
+          <div className={`table-wrap${stale ? " table-wrap--stale" : ""}`} aria-busy={stale}>
+            <table className="invoices">
+              <caption className="visually-hidden">
+                Invoices: vendor, number, dates, total, status and source.
+              </caption>
+              <thead>
+                <tr>
+                  <InvoiceHeaderCells />
+                  <th scope="col">Source</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody>
+                {invoices.map((invoice) => (
+                  <tr key={invoice.id}>
+                    <InvoiceCells
+                      invoice={invoice}
+                      needsReview={invoice.needs_review}
+                      reviewNotes={invoice.review_notes}
+                      rowKey={String(invoice.id)}
+                    />
+                    <td>
+                      <span className="tag-source">
+                        {SOURCE_LABELS[invoice.source] ?? invoice.source}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          <TablePager
+            page={page}
+            pageSize={pageSize}
+            total={total}
+            onPageChange={onPageChange}
+            onPageSizeChange={onPageSizeChange}
+          />
+        </>
       )}
     </section>
   );

@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+from typing import Literal
+
 import io
 import logging
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
 from pypdf import PdfReader
-from sqlalchemy import select
+from sqlalchemy import func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -23,6 +25,7 @@ from app.schemas import (
     ExtractRequest,
     ExtractResponse,
     ImportPreview,
+    InvoicePage,
     ImportedDraft,
     IngestPreview,
     InvoiceDraft,
@@ -80,13 +83,55 @@ def _text_from_upload(file: UploadFile, payload: bytes) -> str:
     )
 
 
-@router.get("/invoices", response_model=list[InvoiceOut])
-def list_invoices(session: Session = Depends(get_session)) -> list[InvoiceOut]:
-    """Every stored invoice, newest first."""
+SORT_COLUMNS = {
+    "created_at": InvoiceRow.created_at,
+    "invoice_date": InvoiceRow.invoice_date,
+    "due_date": InvoiceRow.due_date,
+    "total": InvoiceRow.total,
+    "vendor_name": InvoiceRow.vendor_name,
+}
+
+
+@router.get("/invoices", response_model=InvoicePage)
+def list_invoices(
+    session: Session = Depends(get_session),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(25, ge=1, le=200),
+    q: str | None = Query(None, max_length=200, description="Matches vendor, invoice number, email or PO"),
+    status_filter: Literal["paid", "pending", "overdue"] | None = Query(None, alias="status"),
+    needs_review: bool | None = Query(None),
+    source: Literal["seed", "extracted", "seed-fallback", "uploaded", "imported"] | None = Query(None),
+    sort: Literal["created_at", "invoice_date", "due_date", "total", "vendor_name"] = Query("created_at"),
+    order: Literal["asc", "desc"] = Query("desc"),
+) -> InvoicePage:
+    """One page of invoices with optional search and filters; `total` counts every match."""
+    stmt = select(InvoiceRow)
+    if q and q.strip():
+        needle = f"%{q.strip()}%"
+        stmt = stmt.where(
+            or_(
+                InvoiceRow.vendor_name.ilike(needle),
+                InvoiceRow.invoice_number.ilike(needle),
+                InvoiceRow.vendor_email.ilike(needle),
+                InvoiceRow.po_number.ilike(needle),
+            )
+        )
+    if status_filter is not None:
+        stmt = stmt.where(InvoiceRow.status == status_filter)
+    if needs_review is not None:
+        stmt = stmt.where(InvoiceRow.needs_review.is_(needs_review))
+    if source is not None:
+        stmt = stmt.where(InvoiceRow.source == source)
+
+    total = session.scalar(select(func.count()).select_from(stmt.subquery())) or 0
+    column = SORT_COLUMNS[sort]
+    primary = column.asc() if order == "asc" else column.desc()
     rows = session.scalars(
-        select(InvoiceRow).order_by(InvoiceRow.created_at.desc(), InvoiceRow.id.desc())
+        stmt.order_by(primary, InvoiceRow.id.desc()).offset((page - 1) * page_size).limit(page_size)
     ).all()
-    return [InvoiceOut.model_validate(row) for row in rows]
+    return InvoicePage(
+        items=[InvoiceOut.model_validate(row) for row in rows], total=total, page=page, page_size=page_size
+    )
 
 
 @router.post("/invoices/extract", response_model=ExtractResponse)

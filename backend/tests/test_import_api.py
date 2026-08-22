@@ -125,7 +125,7 @@ def test_bulk_creates_every_draft_as_imported(client: TestClient) -> None:
     # Summary-level imports are not flagged merely for lacking line items.
     assert not all(row["needs_review"] for row in body["created"])
 
-    listed = {row["invoice_number"] for row in client.get("/invoices").json()}
+    listed = {row["invoice_number"] for row in client.get("/invoices", params={"page_size": 200}).json()["items"]}
     assert {"NG-8801", "BP-8802", "MF-8803", "CF-8804"} <= listed
 
 

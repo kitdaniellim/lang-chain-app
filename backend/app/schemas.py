@@ -66,6 +66,13 @@ class InvoiceOut(Invoice):
     created_at: datetime
 
 
+class InvoicePage(BaseModel):
+    items: list[InvoiceOut]
+    total: int
+    page: int
+    page_size: int
+
+
 class ExtractRequest(BaseModel):
     text: str = Field(min_length=20, max_length=20_000)
 

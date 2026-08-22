@@ -11,7 +11,7 @@ const DATABASE_LABELS: Record<HealthResponse["database"], string> = {
   sqlite: "SQLite",
 };
 
-/** Header chip: backend reachability, database kind, and whether Claude has a key. */
+/** Header chip: backend reachability and which database is behind it. Claude lives on the chat. */
 export function HealthChip({ health, loading, error }: HealthChipProps) {
   if (loading && !health) {
     return (
@@ -31,18 +31,11 @@ export function HealthChip({ health, loading, error }: HealthChipProps) {
     );
   }
 
-  const tone = health.llm_configured ? "health-chip--ok" : "health-chip--warn";
+  const tone = health.ok ? "health-chip--ok" : "health-chip--warn";
   return (
     <p className={`health-chip ${tone}`} aria-live="polite">
       <span className="health-chip__dot" />
       <span>{DATABASE_LABELS[health.database]}</span>
-      <span className="health-chip__sep" aria-hidden="true">
-        |
-      </span>
-      <span>
-        Claude: {health.llm_configured ? "ready" : "key missing"}
-        {health.llm_configured && <span className="health-chip__muted"> ({health.model})</span>}
-      </span>
     </p>
   );
 }

@@ -41,6 +41,31 @@ export interface InvoiceOut extends Invoice {
   created_at: string; // ISO datetime
 }
 
+/** Sortable columns accepted by GET /invoices. */
+export type InvoiceSortField = "created_at" | "invoice_date" | "due_date" | "total" | "vendor_name";
+
+export type SortOrder = "asc" | "desc";
+
+/** Query string of GET /invoices; every field is optional and empty ones are not sent. */
+export interface InvoiceQuery {
+  page?: number;
+  page_size?: number;
+  q?: string;
+  status?: InvoiceStatus;
+  needs_review?: boolean;
+  source?: InvoiceSource;
+  sort?: InvoiceSortField;
+  order?: SortOrder;
+}
+
+/** One page of stored rows; `total` counts every row matching the filters, not the page. */
+export interface InvoicePage {
+  items: InvoiceOut[];
+  total: number;
+  page: number;
+  page_size: number;
+}
+
 export interface ChatRequest {
   question: string;
 }

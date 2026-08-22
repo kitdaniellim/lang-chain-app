@@ -1,18 +1,33 @@
 import { render, screen, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { MOCK_INVOICES } from "../api/mock";
 import { InvoiceTable } from "../components/InvoiceTable";
 
-function renderTable() {
-  return render(
-    <InvoiceTable
-      invoices={MOCK_INVOICES}
-      loading={false}
-      error={null}
-      onRetry={vi.fn()}
-      onAddInvoice={vi.fn()}
-    />,
-  );
+type TableProps = Parameters<typeof InvoiceTable>[0];
+
+const onClearFilters = vi.fn();
+
+const baseProps: TableProps = {
+  invoices: MOCK_INVOICES,
+  total: MOCK_INVOICES.length,
+  baseTotal: MOCK_INVOICES.length,
+  page: 1,
+  pageSize: 25,
+  loading: false,
+  error: null,
+  filters: { search: "", status: "", needsReview: false, source: "", sortKey: "newest" },
+  filtersActive: false,
+  onFilterChange: vi.fn(),
+  onClearFilters,
+  onPageChange: vi.fn(),
+  onPageSizeChange: vi.fn(),
+  onRetry: vi.fn(),
+  onAddInvoice: vi.fn(),
+};
+
+function renderTable(overrides: Partial<TableProps> = {}) {
+  return render(<InvoiceTable {...baseProps} {...overrides} />);
 }
 
 describe("InvoiceTable", () => {
@@ -33,10 +48,35 @@ describe("InvoiceTable", () => {
   it("labels every status pill and only badges rows that need review", () => {
     renderTable();
 
-    expect(screen.getAllByText("Paid")).toHaveLength(2);
-    expect(screen.getAllByText("Pending")).toHaveLength(2);
-    expect(screen.getAllByText("Overdue")).toHaveLength(2);
-    expect(screen.getAllByText("Needs review")).toHaveLength(1);
+    // The filter row repeats these words as options, so every count is scoped to the table.
+    const table = within(screen.getByRole("table"));
+    expect(table.getAllByText("Paid")).toHaveLength(2);
+    expect(table.getAllByText("Pending")).toHaveLength(2);
+    expect(table.getAllByText("Overdue")).toHaveLength(2);
+    expect(table.getAllByText("Needs review")).toHaveLength(1);
     expect(screen.getByRole("columnheader", { name: "Total" })).toBeInTheDocument();
+  });
+
+  it("counts filtered rows against the unfiltered total", () => {
+    renderTable({ total: 12, baseTotal: 32, filtersActive: true });
+
+    expect(screen.getByText("12 of 32 invoices")).toBeInTheDocument();
+  });
+
+  it("offers a way out when the filters match nothing", async () => {
+    const user = userEvent.setup();
+    renderTable({ invoices: [], total: 0, baseTotal: 32, filtersActive: true });
+
+    expect(screen.getByText("No invoices match these filters.")).toBeInTheDocument();
+    const [, inEmptyState] = screen.getAllByRole("button", { name: "Clear filters" });
+    await user.click(inEmptyState);
+    expect(onClearFilters).toHaveBeenCalled();
+  });
+
+  it("keeps the previous rows on screen while the next page loads", () => {
+    const { container } = renderTable({ loading: true });
+
+    expect(screen.getByRole("table")).toBeInTheDocument();
+    expect(container.querySelector(".table-wrap--stale")).toBeTruthy();
   });
 });

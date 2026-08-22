@@ -10,6 +10,8 @@ import type {
   Invoice,
   InvoiceDraft,
   InvoiceOut,
+  InvoicePage,
+  InvoiceQuery,
   SkippedInvoice,
 } from "./types";
 
@@ -343,9 +345,48 @@ function delay<T>(value: T, ms = 320): Promise<T> {
 
 const IMPORT_SUFFIXES = [".csv", ".json", ".xlsx"];
 
+/** Same match as the backend: vendor, invoice number, email or PO, case-insensitive. */
+function matchesSearch(row: InvoiceOut, needle: string): boolean {
+  const haystack = [row.vendor_name, row.invoice_number, row.vendor_email, row.po_number];
+  return haystack.some((value) => (value ?? "").toLowerCase().includes(needle));
+}
+
+function sortValue(row: InvoiceOut, field: NonNullable<InvoiceQuery["sort"]>): string | number {
+  if (field === "total") return row.total;
+  if (field === "vendor_name") return row.vendor_name.toLowerCase();
+  return row[field] ?? "";
+}
+
+/** Filters, sorts and slices the fixtures the way GET /invoices does server-side. */
+function paginate(query: InvoiceQuery): InvoicePage {
+  const page = query.page ?? 1;
+  const pageSize = query.page_size ?? 25;
+  const needle = (query.q ?? "").trim().toLowerCase();
+
+  const matches = MOCK_INVOICES.filter((row) => {
+    if (needle && !matchesSearch(row, needle)) return false;
+    if (query.status && row.status !== query.status) return false;
+    if (query.needs_review !== undefined && row.needs_review !== query.needs_review) return false;
+    if (query.source && row.source !== query.source) return false;
+    return true;
+  });
+
+  const field = query.sort ?? "created_at";
+  const direction = query.order === "asc" ? 1 : -1;
+  const sorted = [...matches].sort((a, b) => {
+    const left = sortValue(a, field);
+    const right = sortValue(b, field);
+    if (left === right) return b.id - a.id;
+    return left < right ? -direction : direction;
+  });
+
+  const start = (page - 1) * pageSize;
+  return { items: sorted.slice(start, start + pageSize), total: sorted.length, page, page_size: pageSize };
+}
+
 export const mockApi = {
   health: () => delay(MOCK_HEALTH, 120),
-  invoices: () => delay([...MOCK_INVOICES]),
+  listInvoices: (query: InvoiceQuery = {}) => delay(paginate(query)),
   chat: (question: string) =>
     delay({ ...MOCK_CHAT, answer: `${MOCK_CHAT.answer} (asked: "${question}")` }, 900),
   /** Mirrors /invoices/ingest: structured exports are mapped, documents are extracted. */

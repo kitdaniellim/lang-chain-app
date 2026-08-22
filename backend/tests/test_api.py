@@ -33,16 +33,43 @@ def test_health_reports_the_database_and_the_missing_key(client: TestClient) -> 
     assert body == {"ok": True, "database": "sqlite", "llm_configured": False, "model": "claude-sonnet-5"}
 
 
-def test_list_invoices_returns_the_seeded_rows(client: TestClient) -> None:
+def test_list_invoices_returns_a_page_of_seeded_rows(client: TestClient) -> None:
     response = client.get("/invoices")
     body = response.json()
 
     assert response.status_code == 200
-    assert len(body) == 20
-    first = body[0]
+    assert (body["total"], body["page"], body["page_size"]) == (20, 1, 25)
+    assert len(body["items"]) == 20
+    first = body["items"][0]
     assert {"id", "invoice_number", "vendor_name", "total", "currency", "status"} <= set(first)
     assert first["source"] in {"seed", "seed-fallback"}
     assert isinstance(first["review_notes"], list)
+
+
+def test_list_invoices_paginates_and_filters(client: TestClient) -> None:
+    page2 = client.get("/invoices", params={"page": 2, "page_size": 8}).json()
+    assert (page2["total"], page2["page"], len(page2["items"])) == (20, 2, 8)
+    page3 = client.get("/invoices", params={"page": 3, "page_size": 8}).json()
+    assert len(page3["items"]) == 4
+
+    paid = client.get("/invoices", params={"status": "paid", "page_size": 200}).json()
+    assert paid["total"] == len(paid["items"]) > 0
+    assert {row["status"] for row in paid["items"]} == {"paid"}
+
+    flagged = client.get("/invoices", params={"needs_review": "true"}).json()
+    assert flagged["total"] == 1 and flagged["items"][0]["needs_review"] is True
+
+    vendor = flagged["items"][0]["vendor_name"]
+    found = client.get("/invoices", params={"q": vendor[:6].lower()}).json()
+    assert any(row["vendor_name"] == vendor for row in found["items"])
+    assert client.get("/invoices", params={"q": "zzz-no-such-vendor"}).json()["total"] == 0
+
+    cheapest_first = client.get("/invoices", params={"sort": "total", "order": "asc", "page_size": 3}).json()
+    totals = [row["total"] for row in cheapest_first["items"]]
+    assert totals == sorted(totals)
+
+    assert client.get("/invoices", params={"status": "bogus"}).status_code == 422
+    assert client.get("/invoices", params={"page": 0}).status_code == 422
 
 
 def test_extract_without_a_key_is_503(client: TestClient) -> None:
@@ -81,7 +108,7 @@ def test_creating_an_invoice_returns_201_and_lists_it(client: TestClient) -> Non
     assert created["review_notes"] == []
     assert created["total"] == 7079.55
 
-    listed = client.get("/invoices").json()
+    listed = client.get("/invoices", params={"page_size": 200}).json()["items"]
     assert len(listed) == 21
     assert listed[0]["invoice_number"] == "MAN-9001"
 
